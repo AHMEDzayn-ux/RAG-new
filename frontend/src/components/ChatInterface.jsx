@@ -167,40 +167,33 @@ const ChatInterface = ({ clientId }) => {
                                     </span>
                                     <span className="message-time">{msg.timestamp}</span>
                                 </div>
-                                {msg.role === 'assistant' && msg.content && (() => {
-                                    // Split response into summary and details
-                                    const lines = msg.content.split('\n');
-                                    const firstLine = lines[0];
-                                    const restContent = lines.slice(1).join('\n').trim();
+                                {msg.role === 'assistant' && msg.content && (
+                                    <>
+                                        {/* Uncertainty Warning */}
+                                        {msg.is_uncertain && (
+                                            <div className="uncertainty-warning">
+                                                ⚠️ <strong>Limited Information:</strong> This answer may be incomplete or require human verification.
+                                            </div>
+                                        )}
 
-                                    return (
-                                        <>
-                                            {/* Uncertainty Warning */}
-                                            {msg.is_uncertain && (
-                                                <div className="uncertainty-warning">
-                                                    ⚠️ <strong>Limited Information:</strong> This answer may be incomplete or require human verification.
+                                        {/* Confidence Indicator - only show if confidence is meaningful */}
+                                        {msg.confidence > 0 && msg.confidence < 1 && !msg.is_uncertain && (
+                                            <div className={`confidence-indicator confidence-${msg.confidence >= 0.7 ? 'high' : msg.confidence >= 0.5 ? 'medium' : 'low'}`}>
+                                                <span className="confidence-label">Confidence:</span>
+                                                <div className="confidence-bar">
+                                                    <div
+                                                        className="confidence-fill"
+                                                        style={{ width: `${msg.confidence * 100}%` }}
+                                                    ></div>
                                                 </div>
-                                            )}
+                                                <span className="confidence-value">{Math.round(msg.confidence * 100)}%</span>
+                                            </div>
+                                        )}
 
-                                            {/* Confidence Indicator */}
-                                            {msg.confidence !== undefined && !msg.is_uncertain && (
-                                                <div className={`confidence-indicator confidence-${msg.confidence >= 0.7 ? 'high' : msg.confidence >= 0.5 ? 'medium' : 'low'}`}>
-                                                    <span className="confidence-label">Confidence:</span>
-                                                    <div className="confidence-bar">
-                                                        <div
-                                                            className="confidence-fill"
-                                                            style={{ width: `${msg.confidence * 100}%` }}
-                                                        ></div>
-                                                    </div>
-                                                    <span className="confidence-value">{Math.round(msg.confidence * 100)}%</span>
-                                                </div>
-                                            )}
-
-                                            <div className="message-summary">{firstLine}</div>
-                                            {restContent && <div className="message-details">{restContent}</div>}
-                                        </>
-                                    );
-                                })()}
+                                        {/* Full message content without artificial splitting */}
+                                        <div className="message-content">{msg.content}</div>
+                                    </>
+                                )}
                                 {msg.role !== 'assistant' && <div className="message-content">{msg.content}</div>}
                                 {msg.sources && msg.sources.length > 0 && showSources && (
                                     <div className="message-sources">

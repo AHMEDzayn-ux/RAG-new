@@ -141,51 +141,6 @@
   transform: scale(1.05);
 }
 
-/* Response formatting */
-.message-summary {
-  background: linear-gradient(135deg, #f0f4ff 0%, #e8f0ff 100%);
-  border-left: 4px solid #667eea;
-  padding: 14px 18px;
-  margin-bottom: 14px;
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 16px;
-  color: #2c3e50;
-  line-height: 1.6;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
-  animation: summarySlide 0.4s ease-out;
-  position: relative;
-  overflow: hidden;
-}
-
-@keyframes summarySlide {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.message-summary::before {
-  content: '💡';
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 24px;
-  opacity: 0.3;
-}
-
-.message-details {
-  padding: 8px 0;
-  color: #555;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
 /* Sources button */
 .sources-toggle-btn {
   margin-top: 14px;
@@ -424,6 +379,12 @@
   border: 1px solid #e8e8e8;
   border-bottom-left-radius: 6px;
   color: #333;
+  margin-top: 0;
+}
+
+.message-assistant .confidence-indicator + .message-content,
+.message-assistant .uncertainty-warning + .message-content {
+  margin-top: 0;
 }
 
 .message-assistant .message-content:hover {
