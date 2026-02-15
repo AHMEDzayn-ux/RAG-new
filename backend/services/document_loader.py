@@ -48,7 +48,9 @@ class DocumentLoader:
         self, 
         chunk_size: int = 1000, 
         chunk_overlap: int = 200,
-        enable_section_detection: bool = True
+        enable_section_detection: bool = True,
+        parent_chunk_size: int = 3000,
+        child_chunk_size: int = 400
     ):
         """
         Initialize the document loader.
@@ -57,15 +59,37 @@ class DocumentLoader:
             chunk_size: Maximum characters per chunk (default: 1000)
             chunk_overlap: Overlap between chunks in characters (default: 200)
             enable_section_detection: Enable CV section detection (default: True)
+            parent_chunk_size: Size of parent chunks for parent-child retrieval (default: 3000)
+            child_chunk_size: Size of child chunks for search (default: 400)
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.enable_section_detection = enable_section_detection
+        self.parent_chunk_size = parent_chunk_size
+        self.child_chunk_size = child_chunk_size
+        
+        # Main text splitter
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             length_function=len,
             separators=["\n\n", "\n", " ", ""]
+        )
+        
+        # Parent chunk splitter (larger chunks for context)
+        self.parent_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=parent_chunk_size,
+            chunk_overlap=chunk_overlap * 2,
+            length_function=len,
+            separators=["\n\n", "\n", " ", ""]
+        )
+        
+        # Child chunk splitter (smaller chunks for precise matching)
+        self.child_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=child_chunk_size,
+            chunk_overlap=50,
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
         )
     
     def load_pdf(self, file_path: str) -> str:
@@ -262,4 +286,207 @@ class DocumentLoader:
             "avg_chunk_size": sum(sizes) // len(sizes),
             "min_chunk_size": min(sizes),
             "max_chunk_size": max(sizes)
+        }    
+    def chunk_with_parent_child(
+        self, 
+        text: str, 
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Parent-Child Chunking Strategy for better retrieval.
+        
+        Creates:
+        - Parent chunks (large): Full context for LLM
+        - Child chunks (small): Precise search matching
+        
+        Search happens on child chunks, but parent chunks are retrieved for LLM.
+        
+        Args:
+            text: Text content to split
+            metadata: Optional metadata
+            
+        Returns:
+            Dictionary with parent_chunks and child_chunks lists
+        """
+        if not text or not text.strip():
+            return {"parent_chunks": [], "child_chunks": []}
+        
+        # Create parent chunks
+        parent_texts = self.parent_splitter.split_text(text)
+        parent_chunks = []
+        child_chunks = []
+        
+        for parent_idx, parent_text in enumerate(parent_texts):
+            parent_id = f"parent_{parent_idx}"
+            
+            # Detect section for parent
+            parent_section = None
+            if self.enable_section_detection:
+                for line in parent_text.split('\n')[:5]:
+                    parent_section = self._detect_section(line)
+                    if parent_section:
+                        break
+            
+            parent_metadata = {
+                **(metadata or {}),
+                "parent_id": parent_id,
+                "chunk_type": "parent",
+                "parent_index": parent_idx
+            }
+            if parent_section:
+                parent_metadata["section"] = parent_section
+            
+            parent_chunk = {
+                "text": parent_text,
+                "chunk_id": parent_id,
+                "metadata": parent_metadata
+            }
+            parent_chunks.append(parent_chunk)
+            
+            # Create child chunks from this parent
+            child_texts = self.child_splitter.split_text(parent_text)
+            current_section = parent_section
+            
+            for child_idx, child_text in enumerate(child_texts):
+                child_id = f"{parent_id}_child_{child_idx}"
+                
+                # Detect section for child (might differ within parent)
+                if self.enable_section_detection:
+                    for line in child_text.split('\n')[:3]:
+                        detected = self._detect_section(line)
+                        if detected:
+                            current_section = detected
+                            break
+                
+                child_metadata = {
+                    **(metadata or {}),
+                    "parent_id": parent_id,
+                    "chunk_type": "child",
+                    "parent_index": parent_idx,
+                    "child_index": child_idx
+                }
+                if current_section:
+                    child_metadata["section"] = current_section
+                
+                child_chunk = {
+                    "text": child_text,
+                    "chunk_id": child_id,
+                    "metadata": child_metadata
+                }
+                child_chunks.append(child_chunk)
+        
+        return {
+            "parent_chunks": parent_chunks,
+            "child_chunks": child_chunks
         }
+    
+    def generate_qa_pairs(
+        self,
+        chunk_text: str,
+        num_questions: int = 3,
+        llm_service: Optional[Any] = None
+    ) -> List[str]:
+        """
+        Generate hypothetical questions for a chunk.
+        
+        Strategy: Index questions alongside content for better search alignment.
+        User queries are questions; indexing questions improves matching.
+        
+        Args:
+            chunk_text: Text content
+            num_questions: Number of questions to generate
+            llm_service: LLMService instance for generation
+            
+        Returns:
+            List of generated questions
+        """
+        if not llm_service:
+            # Fallback: Generate simple keyword-based questions
+            return self._generate_simple_questions(chunk_text, num_questions)
+        
+        try:
+            prompt = f"""Based on the following text, generate {num_questions} specific questions that this text can answer. 
+Each question should be concise and directly answerable by the text.
+Format: One question per line, no numbering.
+
+Text:
+{chunk_text[:1000]}
+
+Questions:"""
+            
+            response = llm_service.generate_response(
+                query=prompt,
+                system_prompt="You are a helpful assistant that generates relevant questions from documentation."
+            )
+            
+            # Parse questions from response
+            questions = [q.strip() for q in response.split('\n') if q.strip() and not q.strip().startswith('#')]
+            return questions[:num_questions]
+        
+        except Exception as e:
+            # Fallback to simple questions on error
+            return self._generate_simple_questions(chunk_text, num_questions)
+    
+    def _generate_simple_questions(self, text: str, num: int = 3) -> List[str]:
+        """
+        Generate simple keyword-based questions as fallback.
+        
+        Args:
+            text: Text content
+            num: Number of questions
+            
+        Returns:
+            List of simple questions
+        """
+        # Extract key phrases (simple heuristic)
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        questions = []
+        
+        templates = [
+            "What is {}?",
+            "How does {} work?",
+            "Tell me about {}",
+            "Explain {}",
+            "What are the details of {}?"
+        ]
+        
+        # Extract first few words from sentences as topics
+        for i, sentence in enumerate(sentences[:num]):
+            words = sentence.split()[:5]
+            if len(words) >= 2:
+                topic = ' '.join(words)
+                template = templates[i % len(templates)]
+                questions.append(template.format(topic))
+        
+        return questions[:num]
+    
+    def chunk_with_qa_generation(
+        self,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        llm_service: Optional[Any] = None,
+        generate_qa: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Chunk text and optionally generate QA pairs for each chunk.
+        
+        Args:
+            text: Text content
+            metadata: Optional metadata
+            llm_service: LLMService for QA generation
+            generate_qa: Whether to generate QA pairs
+            
+        Returns:
+            List of chunks with optional generated questions
+        """
+        chunks = self.chunk_text(text, metadata)
+        
+        if generate_qa and chunks:
+            for chunk in chunks:
+                chunk["generated_questions"] = self.generate_qa_pairs(
+                    chunk["text"],
+                    num_questions=2,
+                    llm_service=llm_service
+                )
+        
+        return chunks

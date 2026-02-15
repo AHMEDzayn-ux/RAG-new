@@ -127,15 +127,18 @@ class VectorStoreService:
         self,
         collection_name: str,
         query_embeddings: List[List[float]],
-        n_results: int = 5
+        n_results: int = 5,
+        metadata_filter: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Query the collection for similar documents.
+        Query the collection for similar documents with optional metadata filtering.
         
         Args:
             collection_name: Name of the collection to query
             query_embeddings: List of query embedding vectors
             n_results: Number of results to return per query
+            metadata_filter: Optional dictionary to filter results by metadata
+                           Example: {"section": "work_experience", "user_tier": "enterprise"}
         
         Returns:
             Dictionary containing:
@@ -159,8 +162,11 @@ class VectorStoreService:
                 f"does not match collection dimension {collection['dimension']}"
             )
         
+        # If metadata filter provided, retrieve more results and filter
+        search_n = n_results * 3 if metadata_filter else n_results
+        
         # Perform search
-        distances, indices = collection['index'].search(query_array, n_results)
+        distances, indices = collection['index'].search(query_array, min(search_n, len(collection['documents'])))
         
         # Prepare results
         results = {
@@ -174,24 +180,65 @@ class VectorStoreService:
             query_docs = []
             query_metas = []
             query_ids = []
+            query_dists = []
             
-            for idx in query_indices:
+            for j, idx in enumerate(query_indices):
                 if idx < len(collection['documents']):
+                    metadata = collection['metadatas'][idx]
+                    
+                    # Apply metadata filter if provided
+                    if metadata_filter:
+                        if not self._match_metadata_filter(metadata, metadata_filter):
+                            continue
+                    
                     query_docs.append(collection['documents'][idx])
-                    query_metas.append(collection['metadatas'][idx])
+                    query_metas.append(metadata)
                     query_ids.append(collection['ids'][idx])
+                    query_dists.append(distances[i][j])
+                    
+                    # Stop once we have enough results
+                    if len(query_docs) >= n_results:
+                        break
             
             results['documents'].append(query_docs)
             results['metadatas'].append(query_metas)
-            results['distances'].append(distances[i].tolist())
+            results['distances'].append(query_dists)
             results['ids'].append(query_ids)
         
+        filter_msg = f" with filter {metadata_filter}" if metadata_filter else ""
         logger.info(
-            f"Queried collection '{collection_name}' with {len(query_embeddings)} queries, "
+            f"Queried collection '{collection_name}' with {len(query_embeddings)} queries{filter_msg}, "
             f"returning {n_results} results each"
         )
         
         return results
+    
+    def _match_metadata_filter(self, metadata: Dict[str, Any], filter_dict: Dict[str, Any]) -> bool:
+        """
+        Check if metadata matches all filter criteria.
+        
+        Args:
+            metadata: Document metadata dictionary
+            filter_dict: Filter criteria dictionary
+            
+        Returns:
+            True if all filter criteria match, False otherwise
+        """
+        for key, value in filter_dict.items():
+            # Support nested keys with dot notation (e.g., "user.tier")
+            if '.' in key:
+                current = metadata
+                for part in key.split('.'):
+                    if isinstance(current, dict) and part in current:
+                        current = current[part]
+                    else:
+                        return False
+                if current != value:
+                    return False
+            else:
+                if metadata.get(key) != value:
+                    return False
+        return True
     
     def delete_collection(self, name: str) -> None:
         """

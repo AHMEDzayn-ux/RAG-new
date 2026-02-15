@@ -79,45 +79,74 @@ class RAGPipeline:
         pdf_paths: List[str],
         chunk_size: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        use_parent_child: bool = False,
+        generate_qa_pairs: bool = False
     ) -> Dict[str, Any]:
         """
-        Index documents into the vector store.
+        Index documents into the vector store with advanced strategies.
         
         Complete workflow:
-        1. Load PDFs and chunk text
-        2. Generate embeddings for chunks
-        3. Store in vector database
+        1. Load PDFs and chunk text (with optional parent-child strategy)
+        2. Generate QA pairs if enabled (for better search alignment)
+        3. Generate embeddings for chunks/questions
+        4. Store in vector database with rich metadata
         
         Args:
             pdf_paths: List of PDF file paths to index
             chunk_size: Custom chunk size (optional)
             chunk_overlap: Custom chunk overlap (optional)
             metadata: Additional metadata to attach to all documents
+            use_parent_child: Use parent-child chunking strategy
+            generate_qa_pairs: Generate hypothetical QA pairs for better search
         
         Returns:
             Dictionary with indexing statistics
         """
         logger.info(f"Starting document indexing for {len(pdf_paths)} PDFs")
+        logger.info(f"Parent-child: {use_parent_child}, QA generation: {generate_qa_pairs}")
         
         all_chunks = []
         all_texts = []
         all_metadatas = []
+        parent_lookup = {}  # Maps child_id to parent_text
         
         # Step 1: Load and chunk all documents
         for pdf_path in pdf_paths:
             try:
                 logger.info(f"Processing: {pdf_path}")
                 
-                # Load and chunk
-                if chunk_size and chunk_overlap:
-                    chunks = self.doc_loader.load_and_chunk_pdf(
-                        pdf_path,
-                        chunk_size=chunk_size,
-                        chunk_overlap=chunk_overlap
+                # Load PDF content
+                text = self.doc_loader.load_pdf(pdf_path)
+                
+                if use_parent_child:
+                    # Use parent-child strategy
+                    result = self.doc_loader.chunk_with_parent_child(text, metadata)
+                    chunks = result['child_chunks']  # Index children for search
+                    
+                    # Store parent lookup for retrieval
+                    for parent in result['parent_chunks']:
+                        parent_id = parent['metadata']['parent_id']
+                        parent_lookup[parent_id] = parent['text']
+                    
+                    logger.info(f"Created {len(result['parent_chunks'])} parents, {len(chunks)} children")
+                    
+                elif generate_qa_pairs:
+                    # Generate QA pairs for better search
+                    chunks = self.doc_loader.chunk_with_qa_generation(
+                        text, 
+                        metadata,
+                        llm_service=self.llm_service,
+                        generate_qa=True
                     )
+                    logger.info(f"Generated QA pairs for {len(chunks)} chunks")
                 else:
-                    chunks = self.doc_loader.load_and_chunk_pdf(pdf_path)
+                    # Standard chunking
+                    if chunk_size and chunk_overlap:
+                        self.doc_loader.chunk_size = chunk_size
+                        self.doc_loader.chunk_overlap = chunk_overlap
+                    
+                    chunks = self.doc_loader.chunk_text(text, metadata)
                 
                 # Prepare data
                 for i, chunk in enumerate(chunks):
@@ -132,9 +161,25 @@ class RAGPipeline:
                     chunk_metadata['source'] = pdf_path
                     chunk_metadata['chunk_index'] = i
                     
+                    # Store parent lookup if using parent-child
+                    if use_parent_child and 'parent_id' in chunk_metadata:
+                        chunk_metadata['has_parent'] = True
+                    
                     all_chunks.append(chunk)
                     all_texts.append(text)
                     all_metadatas.append(chunk_metadata)
+                    
+                    # If QA pairs generated, also index the questions
+                    if generate_qa_pairs and 'generated_questions' in chunk:
+                        for q_idx, question in enumerate(chunk['generated_questions']):
+                            qa_metadata = chunk_metadata.copy()
+                            qa_metadata['content_type'] = 'question'
+                            qa_metadata['original_chunk_index'] = i
+                            qa_metadata['question_index'] = q_idx
+                            
+                            all_texts.append(question)
+                            all_metadatas.append(qa_metadata)
+                            logger.debug(f"Added question: {question[:50]}...")
                 
                 logger.info(f"Processed {len(chunks)} chunks from {pdf_path}")
                 
@@ -183,21 +228,24 @@ class RAGPipeline:
         self,
         question: str,
         top_k: Optional[int] = None,
-        return_sources: bool = True
+        return_sources: bool = True,
+        metadata_filter: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Query the RAG system.
+        Query the RAG system with advanced retrieval strategies.
         
         Complete workflow:
         1. Generate embedding for question
-        2. Retrieve relevant documents from vector store
+        2. Retrieve relevant documents from vector store (with metadata filtering)
         3. Filter by section if query intent detected
-        4. Generate response using LLM with context
+        4. Retrieve parent chunks if using parent-child strategy
+        5. Generate response using LLM with context
         
         Args:
             question: User's question
             top_k: Number of documents to retrieve (default from settings)
             return_sources: Whether to include source documents in response
+            metadata_filter: Optional metadata filter (e.g., {"user_tier": "enterprise"})
         
         Returns:
             Dictionary with answer and optional sources
@@ -206,21 +254,25 @@ class RAGPipeline:
         
         # Detect query intent for section filtering
         target_section = self._detect_query_section(question)
+        
+        # Build metadata filter
+        combined_filter = metadata_filter.copy() if metadata_filter else {}
         if target_section:
+            combined_filter['section'] = target_section
             logger.info(f"Detected query intent: {target_section}")
         
         # Step 1: Generate query embedding
         query_embedding = self.embeddings_service.embed_text(question)
         logger.info("Generated query embedding")
-        
-        # Step 2: Retrieve relevant documents
+        # Step 2: Retrieve relevant documents with metadata filter
         top_k = top_k or settings.retrieval_top_k
         
         try:
             results = self.vector_store.query(
                 collection_name=self.collection_name,
                 query_embeddings=[query_embedding],
-                n_results=top_k * 2 if target_section else top_k  # Retrieve more if filtering
+                n_results=top_k,
+                metadata_filter=combined_filter if combined_filter else None
             )
         except Exception as e:
             logger.error(f"Error querying vector store: {str(e)}")
@@ -230,18 +282,22 @@ class RAGPipeline:
         retrieved_docs = []
         if results['documents'] and len(results['documents']) > 0:
             for i, doc in enumerate(results['documents'][0]):
+                doc_metadata = results['metadatas'][0][i]
+                
+                # Skip questions, retrieve original content
+                if doc_metadata.get('content_type') == 'question':
+                    continue
+                
                 retrieved_docs.append({
                     'text': doc,
-                    'metadata': results['metadatas'][0][i],
+                    'metadata': doc_metadata,
                     'distance': results['distances'][0][i]
                 })
         
-        # Step 3: Filter by section if intent detected
-        if target_section and retrieved_docs:
-            filtered_docs = self._filter_by_section(retrieved_docs, target_section)
-            if filtered_docs:  # Only use filtered if we got results
-                retrieved_docs = filtered_docs[:top_k]
-                logger.info(f"Filtered to {len(retrieved_docs)} documents in section '{target_section}'")
+        # Step 3: Retrieve parent chunks if using parent-child strategy
+        if retrieved_docs and any(doc['metadata'].get('has_parent') for doc in retrieved_docs):
+            retrieved_docs = self._retrieve_parent_chunks(retrieved_docs)
+            logger.info("Replaced child chunks with parent chunks for full context")
         
         logger.info(f"Retrieved {len(retrieved_docs)} relevant documents")
         
@@ -305,21 +361,73 @@ class RAGPipeline:
                 filtered.append(doc)
         return filtered
     
+    def _retrieve_parent_chunks(self, child_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Replace child chunks with their parent chunks for full context.
+        
+        Args:
+            child_docs: List of retrieved child documents
+            
+        Returns:
+            List of parent documents (deduplicated)
+        """
+        parent_docs = []
+        seen_parents = set()
+        
+        for doc in child_docs:
+            parent_id = doc['metadata'].get('parent_id')
+            if not parent_id or parent_id in seen_parents:
+                # No parent or already retrieved, keep original
+                if parent_id not in seen_parents:
+                    parent_docs.append(doc)
+                    if parent_id:
+                        seen_parents.add(parent_id)
+                continue
+            
+            # Try to retrieve parent chunk from vector store
+            # Search for parent by parent_id in metadata
+            try:
+                parent_filter = {'parent_id': parent_id, 'chunk_type': 'parent'}
+                results = self.vector_store.query(
+                    collection_name=self.collection_name,
+                    query_embeddings=[doc['metadata'].get('embedding', [0.0] * 384)],  # Dummy query
+                    n_results=1,
+                    metadata_filter=parent_filter
+                )
+                
+                if results['documents'] and results['documents'][0]:
+                    parent_docs.append({
+                        'text': results['documents'][0][0],
+                        'metadata': results['metadatas'][0][0],
+                        'distance': doc['distance']  # Keep child's relevance score
+                    })
+                    seen_parents.add(parent_id)
+                else:
+                    # Parent not found, keep child
+                    parent_docs.append(doc)
+            except:
+                # Error retrieving parent, keep child
+                parent_docs.append(doc)
+        
+        return parent_docs
+    
     def chat(
         self,
         message: str,
         conversation_history: List[Dict[str, str]],
         use_retrieval: bool = True,
-        top_k: Optional[int] = None
+        top_k: Optional[int] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Conversational query with history.
+        Conversational query with history and advanced retrieval.
         
         Args:
             message: Current user message
             conversation_history: Previous conversation messages (list of dicts with 'role' and 'content')
             use_retrieval: Whether to retrieve context from vector store
             top_k: Number of documents to retrieve if using retrieval
+            metadata_filter: Optional metadata filter for retrieval
         
         Returns:
             Dictionary with response and conversation info
@@ -328,7 +436,11 @@ class RAGPipeline:
         
         # Detect query intent for section filtering
         target_section = self._detect_query_section(message)
+        
+        # Build combined metadata filter
+        combined_filter = metadata_filter.copy() if metadata_filter else {}
         if target_section:
+            combined_filter['section'] = target_section
             logger.info(f"Detected chat query intent: {target_section}")
         
         context = None
@@ -343,7 +455,8 @@ class RAGPipeline:
                 results = self.vector_store.query(
                     collection_name=self.collection_name,
                     query_embeddings=[query_embedding],
-                    n_results=top_k * 2 if target_section else top_k  # Retrieve more if filtering
+                    n_results=top_k,
+                    metadata_filter=combined_filter if combined_filter else None
                 )
                 
                 # Extract context
@@ -356,15 +469,14 @@ class RAGPipeline:
                             'distance': results['distances'][0][i] if results.get('distances') else 0
                         }
                         for i, doc in enumerate(context)
+                        if not results['metadatas'][0][i].get('content_type') == 'question'  # Skip questions
                     ]
                     
-                    # Filter by section if intent detected
-                    if target_section and retrieved_docs:
-                        filtered_docs = self._filter_by_section(retrieved_docs, target_section)
-                        if filtered_docs:  # Only use filtered if we got results
-                            retrieved_docs = filtered_docs[:top_k]
-                            context = [doc['text'] for doc in retrieved_docs]
-                            logger.info(f"Filtered chat results to {len(retrieved_docs)} documents in section '{target_section}'")
+                    # Retrieve parent chunks if using parent-child
+                    if retrieved_docs and any(doc['metadata'].get('has_parent') for doc in retrieved_docs):
+                        retrieved_docs = self._retrieve_parent_chunks(retrieved_docs)
+                        context = [doc['text'] for doc in retrieved_docs]
+                        logger.info(f"Retrieved parent chunks for full context")
                     
                     logger.info(f"Retrieved {len(retrieved_docs)} documents")
                 else:
