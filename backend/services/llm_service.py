@@ -193,7 +193,14 @@ Guidelines:
 3. Be concise and direct in your answers
 4. If you're not certain about something, express that uncertainty
 5. Do not make up information or use knowledge outside the provided context
-6. Cite specific parts of the context when relevant"""
+6. Cite specific parts of the context when relevant
+
+IMPORTANT - Context Distinctions:
+- "Work experience" or "jobs" = paid employment with job titles, companies, dates ONLY
+- Volunteer work, organizing committees, event coordination = extracurricular activities, NOT work experience
+- When asked about work/jobs, ONLY mention paid employment positions
+- When asked about general experience, you may include both employment and activities
+- Always list ALL positions found in the context that match the query type"""
     
     def _get_chat_system_prompt(self) -> str:
         """Get system prompt for conversational chat."""
@@ -209,7 +216,13 @@ Guidelines:
 2. Provide helpful, accurate, and conversational responses
 3. Use the provided context when available to inform your answers
 4. Be natural and engaging in your communication style
-5. Ask clarifying questions if needed"""
+5. Ask clarifying questions if needed
+
+IMPORTANT - Context Distinctions:
+- "Work experience" or "jobs" = paid employment positions ONLY (with job title, company, dates)
+- Volunteer/organizing/committee work = extracurricular activities, NOT work experience
+- When asked about work/jobs, focus ONLY on paid employment
+- Always list ALL positions found in context that match the query type"""
     
     def _build_user_message(self, query: str, context: Optional[List[str]] = None) -> str:
         """

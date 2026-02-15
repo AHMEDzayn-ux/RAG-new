@@ -29,6 +29,26 @@ class RAGPipeline:
     4. LLM-based response generation
     """
     
+    # Query intent patterns to filter by section
+    QUERY_SECTION_MAP = {
+        "work_experience": [
+            r"(?i)(work\s+experience|job|employment|professional\s+experience|career)",
+            r"(?i)(jobs\s+done|worked\s+as|working\s+at)"
+        ],
+        "education": [
+            r"(?i)(education|degree|university|college|academic|studied|student)"
+        ],
+        "skills": [
+            r"(?i)(skills|technical|competencies|expertise|proficient)"
+        ],
+        "volunteer": [
+            r"(?i)(volunteer|extracurricular|organizing|committee|leadership\s+role)"
+        ],
+        "projects": [
+            r"(?i)(projects|portfolio|built|developed)"
+        ]
+    }
+    
     def __init__(
         self,
         collection_name: str = "default",
@@ -171,7 +191,8 @@ class RAGPipeline:
         Complete workflow:
         1. Generate embedding for question
         2. Retrieve relevant documents from vector store
-        3. Generate response using LLM with context
+        3. Filter by section if query intent detected
+        4. Generate response using LLM with context
         
         Args:
             question: User's question
@@ -182,6 +203,11 @@ class RAGPipeline:
             Dictionary with answer and optional sources
         """
         logger.info(f"Processing query: {question}")
+        
+        # Detect query intent for section filtering
+        target_section = self._detect_query_section(question)
+        if target_section:
+            logger.info(f"Detected query intent: {target_section}")
         
         # Step 1: Generate query embedding
         query_embedding = self.embeddings_service.embed_text(question)
@@ -194,7 +220,7 @@ class RAGPipeline:
             results = self.vector_store.query(
                 collection_name=self.collection_name,
                 query_embeddings=[query_embedding],
-                n_results=top_k
+                n_results=top_k * 2 if target_section else top_k  # Retrieve more if filtering
             )
         except Exception as e:
             logger.error(f"Error querying vector store: {str(e)}")
@@ -210,9 +236,16 @@ class RAGPipeline:
                     'distance': results['distances'][0][i]
                 })
         
+        # Step 3: Filter by section if intent detected
+        if target_section and retrieved_docs:
+            filtered_docs = self._filter_by_section(retrieved_docs, target_section)
+            if filtered_docs:  # Only use filtered if we got results
+                retrieved_docs = filtered_docs[:top_k]
+                logger.info(f"Filtered to {len(retrieved_docs)} documents in section '{target_section}'")
+        
         logger.info(f"Retrieved {len(retrieved_docs)} relevant documents")
         
-        # Step 3: Generate response using LLM
+        # Step 4: Generate response using LLM
         try:
             answer = self.llm_service.generate_rag_response(
                 query=question,
@@ -237,6 +270,41 @@ class RAGPipeline:
         
         return response
     
+    def _detect_query_section(self, query: str) -> Optional[str]:
+        """
+        Detect which CV section the query is asking about.
+        
+        Args:
+            query: User's question
+            
+        Returns:
+            Section name or None if no specific section detected
+        """
+        import re
+        for section, patterns in self.QUERY_SECTION_MAP.items():
+            for pattern in patterns:
+                if re.search(pattern, query):
+                    return section
+        return None
+    
+    def _filter_by_section(self, documents: List[Dict[str, Any]], section: str) -> List[Dict[str, Any]]:
+        """
+        Filter documents by section metadata.
+        
+        Args:
+            documents: List of retrieved documents
+            section: Target section name
+            
+        Returns:
+            Filtered list of documents from the target section
+        """
+        filtered = []
+        for doc in documents:
+            doc_section = doc.get('metadata', {}).get('section')
+            if doc_section == section:
+                filtered.append(doc)
+        return filtered
+    
     def chat(
         self,
         message: str,
@@ -258,6 +326,11 @@ class RAGPipeline:
         """
         logger.info(f"Processing chat message: {message}")
         
+        # Detect query intent for section filtering
+        target_section = self._detect_query_section(message)
+        if target_section:
+            logger.info(f"Detected chat query intent: {target_section}")
+        
         context = None
         retrieved_docs = None
         
@@ -270,7 +343,7 @@ class RAGPipeline:
                 results = self.vector_store.query(
                     collection_name=self.collection_name,
                     query_embeddings=[query_embedding],
-                    n_results=top_k
+                    n_results=top_k * 2 if target_section else top_k  # Retrieve more if filtering
                 )
                 
                 # Extract context
@@ -284,6 +357,15 @@ class RAGPipeline:
                         }
                         for i, doc in enumerate(context)
                     ]
+                    
+                    # Filter by section if intent detected
+                    if target_section and retrieved_docs:
+                        filtered_docs = self._filter_by_section(retrieved_docs, target_section)
+                        if filtered_docs:  # Only use filtered if we got results
+                            retrieved_docs = filtered_docs[:top_k]
+                            context = [doc['text'] for doc in retrieved_docs]
+                            logger.info(f"Filtered chat results to {len(retrieved_docs)} documents in section '{target_section}'")
+                    
                     logger.info(f"Retrieved {len(retrieved_docs)} documents")
                 else:
                     logger.info("No documents found in collection for retrieval")
