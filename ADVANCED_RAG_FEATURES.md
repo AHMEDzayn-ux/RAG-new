@@ -1,6 +1,7 @@
 # Advanced RAG Features Guide
 
 ## Overview
+
 This multi-tenant RAG system now implements production-grade strategies for customer support applications. These features ensure accurate, contextual responses even with complex, multi-section documents.
 
 ---
@@ -8,24 +9,28 @@ This multi-tenant RAG system now implements production-grade strategies for cust
 ## 1. Parent-Child Chunking Strategy
 
 ### Problem Solved
+
 Traditional fixed-size chunking (500 chars) can split logical sections awkwardly, causing loss of context.
 
 ### Solution: Hierarchical Chunking
+
 - **Child Chunks (400 chars)**: Small, precise chunks for search matching
 - **Parent Chunks (3000 chars)**: Large chunks containing full context
 - **Strategy**: Search on children, retrieve parents for LLM
 
 ### How It Works
+
 ```
 Document → Parent Chunks (3000 chars each)
            ├─ Child 1 (400 chars) ← Indexed for search
-           ├─ Child 2 (400 chars) ← Indexed for search  
+           ├─ Child 2 (400 chars) ← Indexed for search
            └─ Child 3 (400 chars) ← Indexed for search
 
 User Query → Matches Child 2 → System retrieves entire Parent chunk
 ```
 
 ### Usage
+
 ```python
 pipeline = RAGPipeline(collection_name="client_name")
 
@@ -37,6 +42,7 @@ stats = pipeline.index_documents(
 ```
 
 ### Benefits
+
 ✅ Precise search matching (small child chunks)  
 ✅ Full context for LLM (large parent chunks)  
 ✅ No information loss at chunk boundaries
@@ -46,12 +52,15 @@ stats = pipeline.index_documents(
 ## 2. Metadata Filtering
 
 ### Problem Solved
+
 Generic searches retrieve irrelevant content (e.g., US pricing shown to EU users).
 
 ### Solution: Pre-filter by Metadata
+
 Add rich metadata during indexing, filter before vector search.
 
 ### Metadata Examples
+
 ```python
 metadata = {
     "user_tier": "enterprise",     # Filter by customer tier
@@ -63,6 +72,7 @@ metadata = {
 ```
 
 ### Usage
+
 ```python
 # Index with metadata
 pipeline.index_documents(
@@ -84,7 +94,9 @@ result = pipeline.query(
 ```
 
 ### Automatic Section Detection
+
 The system auto-detects CV/document sections:
+
 - `work_experience`: Employment history
 - `education`: Academic background
 - `skills`: Technical competencies
@@ -99,12 +111,15 @@ When user asks "list work experience", system auto-filters to `section: "work_ex
 ## 3. Q&A Pair Generation
 
 ### Problem Solved
+
 User queries are questions, but documents are statements. Semantic mismatch reduces retrieval accuracy.
 
-### Solution: Index Questions  Alongside Content
+### Solution: Index Questions Alongside Content
+
 Generate hypothetical questions for each chunk, index both.
 
 ### How It Works
+
 ```
 Original Chunk:
 "Call Center Executive at FBC Asia. Handled customer inquiries..."
@@ -120,6 +135,7 @@ Generated Questions:
 When user asks "What jobs did they have?", matches generated questions more accurately.
 
 ### Usage
+
 ```python
 # Enable QA generation
 stats = pipeline.index_documents(
@@ -129,6 +145,7 @@ stats = pipeline.index_documents(
 ```
 
 ### Behind the Scenes
+
 - Uses LLM to generate 2-3 questions per chunk
 - Questions indexed alongside original text
 - Search matches questions, retrieves original content
@@ -139,12 +156,15 @@ stats = pipeline.index_documents(
 ## 4. Intelligent Query Intent Detection
 
 ### Problem Solved
+
 "List work experience" should exclude volunteer activities, but both contain similar keywords.
 
 ### Solution: Pattern-Based Intent Detection
+
 System detects query intent and auto-applies filters.
 
 ### Detection Patterns
+
 ```python
 Query: "What jobs has he done?"
 → Detected: work_experience
@@ -160,19 +180,21 @@ Query: "What's his education?"
 ```
 
 ### Supported Intents
-| Intent | Keywords Detected |
-|--------|-------------------|
+
+| Intent            | Keywords Detected                                      |
+| ----------------- | ------------------------------------------------------ |
 | `work_experience` | work, job, employment, career, professional experience |
-| `education` | education, degree, university, studied, academic |
-| `skills` | skills, technical, competencies, expertise |
-| `volunteer` | volunteer, extracurricular, organizing committee |
-| `projects` | projects, portfolio, built, developed |
+| `education`       | education, degree, university, studied, academic       |
+| `skills`          | skills, technical, competencies, expertise             |
+| `volunteer`       | volunteer, extracurricular, organizing committee       |
+| `projects`        | projects, portfolio, built, developed                  |
 
 ---
 
 ## 5. Complete Integration Example
 
 ### Customer Support Bot Setup
+
 ```python
 from backend.services.rag_pipeline import RAGPipeline
 
@@ -214,6 +236,7 @@ print(f"Sources: {len(result['sources'])} documents")
 ```
 
 ### Chat with Context Awareness
+
 ```python
 # Conversational query with metadata
 conversation_history = [
@@ -236,6 +259,7 @@ response = pipeline.chat(
 ## 6. API Endpoints (Updated)
 
 ### Upload Documents with Metadata
+
 ```http
 POST /api/documents/upload/{client_name}
 Content-Type: multipart/form-data
@@ -247,6 +271,7 @@ generate_qa=true
 ```
 
 ### Query with Filtering
+
 ```http
 POST /api/query/{client_name}
 Content-Type: application/json
@@ -264,6 +289,7 @@ Content-Type: application/json
 ## 7. Performance Impact
 
 ### Indexing Time
+
 - Standard chunking: **Baseline**
 - Parent-child: **+15%** (creates more chunks)
 - QA generation: **+200%** (LLM calls per chunk)
@@ -271,11 +297,13 @@ Content-Type: application/json
 **Recommendation**: Use QA generation only for critical support documents.
 
 ### Query Time
+
 - Standard query: **~500ms**
 - With metadata filter: **~300ms** (pre-filters before search)
 - With parent retrieval: **~600ms** (extra lookup)
 
 ### Storage
+
 - Standard: **1x** storage
 - Parent-child: **2.5x** storage (parents + children)
 - QA generation: **1.3x** storage (questions indexed)
@@ -285,6 +313,7 @@ Content-Type: application/json
 ## 8. Best Practices for Multi-Tenant Support
 
 ### 1. Metadata Strategy
+
 ```python
 # Good: Rich, queryable metadata
 metadata = {
@@ -299,7 +328,9 @@ metadata = {"type": "document"}
 ```
 
 ### 2. Section Detection Customization
+
 Add custom patterns for your domain:
+
 ```python
 # In document_loader.py
 SECTION_PATTERNS = {
@@ -310,7 +341,9 @@ SECTION_PATTERNS = {
 ```
 
 ### 3. Query Intent Patterns
+
 Customize for your support topics:
+
 ```python
 # In rag_pipeline.py
 QUERY_SECTION_MAP = {
@@ -322,18 +355,19 @@ QUERY_SECTION_MAP = {
 
 ### 4. When to Use Each Feature
 
-| Feature | Use When | Skip When |
-|---------|----------|-----------|
-| Parent-Child | Long documents (>5000 words) | Short FAQs |
-| QA Generation | Support docs with complex language | Time-sensitive indexing |
-| Metadata Filtering | Multi-tenant, multi-region | Single-tenant system |
-| Section Detection | CVs, structured docs | Unstructured chat logs |
+| Feature            | Use When                           | Skip When               |
+| ------------------ | ---------------------------------- | ----------------------- |
+| Parent-Child       | Long documents (>5000 words)       | Short FAQs              |
+| QA Generation      | Support docs with complex language | Time-sensitive indexing |
+| Metadata Filtering | Multi-tenant, multi-region         | Single-tenant system    |
+| Section Detection  | CVs, structured docs               | Unstructured chat logs  |
 
 ---
 
 ## 9. Migration Guide
 
 ### Existing Collections
+
 To upgrade existing collections:
 
 ```python
@@ -358,6 +392,7 @@ new_pipeline.index_documents(
 ## 10. Monitoring & Debugging
 
 ### Check Metadata Distribution
+
 ```python
 # Get collection stats
 collection = pipeline.vector_store.collections["client_name"]
@@ -371,6 +406,7 @@ print(Counter(sections))
 ```
 
 ### Verify Parent-Child Links
+
 ```python
 children = [m for m in metadatas if m.get('chunk_type') == 'child']
 parents = [m for m in metadatas if m.get('chunk_type') == 'parent']
@@ -379,6 +415,7 @@ print(f"Ratio: {len(children) / len(parents):.1f} children per parent")
 ```
 
 ### Test QA Pairs
+
 ```python
 qa_chunks = [m for m in metadatas if m.get('content_type') == 'question']
 print(f"Generated {len(qa_chunks)} question variants")
@@ -392,6 +429,6 @@ print(f"Generated {len(qa_chunks)} question variants")
 ✅ **Metadata Filtering**: Pre-filter irrelevant results  
 ✅ **QA Pair Generation**: Better question-document alignment  
 ✅ **Intent Detection**: Auto-filter by query type  
-✅ **Section Detection**: Distinguish work vs volunteer experience  
+✅ **Section Detection**: Distinguish work vs volunteer experience
 
 These features work together to provide **production-grade customer support** with accurate, contextual responses tailored to user tier, region, and query intent.

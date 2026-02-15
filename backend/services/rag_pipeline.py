@@ -301,7 +301,10 @@ class RAGPipeline:
         
         logger.info(f"Retrieved {len(retrieved_docs)} relevant documents")
         
-        # Step 4: Generate response using LLM
+        # Step 4: Calculate confidence score based on retrieval distances
+        confidence = self._calculate_confidence(retrieved_docs) if retrieved_docs else 0.0
+        
+        # Step 5: Generate response using LLM
         try:
             answer = self.llm_service.generate_rag_response(
                 query=question,
@@ -314,15 +317,24 @@ class RAGPipeline:
         
         logger.info("Generated response")
         
+        # Step 6: Detect if response is an "I don't know" type
+        is_uncertain = self._detect_uncertainty(answer)
+        
+        # Step 7: Format sources for citations
+        formatted_sources = self._format_sources_for_citations(retrieved_docs) if retrieved_docs else []
+        
         # Prepare response
         response = {
             'question': question,
             'answer': answer,
-            'num_sources': len(retrieved_docs)
+            'confidence': confidence,
+            'is_uncertain': is_uncertain,
+            'num_sources': len(retrieved_docs),
+            'sources_available': len(retrieved_docs) > 0
         }
         
         if return_sources:
-            response['sources'] = retrieved_docs
+            response['sources'] = formatted_sources
         
         return response
     
@@ -411,6 +423,129 @@ class RAGPipeline:
         
         return parent_docs
     
+    def _calculate_confidence(self, documents: List[Dict[str, Any]]) -> float:
+        """
+        Calculate confidence score based on retrieval quality.
+        
+        Uses distance scores to estimate how confident we are in the answer.
+        Lower distance = higher confidence (closer semantic match).
+        
+        Args:
+            documents: List of retrieved documents with distance scores
+            
+        Returns:
+            Confidence score between 0.0 and 1.0
+        """
+        if not documents:
+            return 0.0
+        
+        # Get average distance of top documents
+        distances = [doc.get('distance', 1.0) for doc in documents[:3]]  # Top 3
+        avg_distance = sum(distances) / len(distances)
+        
+        # Convert distance to confidence (inverse relationship)
+        # FAISS L2 distance typically ranges 0-2 for good matches
+        # Lower distance = higher confidence
+        if avg_distance < 0.3:
+            confidence = 0.95  # Very high confidence
+        elif avg_distance < 0.5:
+            confidence = 0.85  # High confidence
+        elif avg_distance < 0.8:
+            confidence = 0.70  # Moderate confidence
+        elif avg_distance < 1.2:
+            confidence = 0.50  # Low confidence
+        else:
+            confidence = 0.30  # Very low confidence
+        
+        return round(confidence, 2)
+    
+    def _detect_uncertainty(self, response: str) -> bool:
+        """
+        Detect if the LLM response indicates uncertainty or inability to answer.
+        
+        Args:
+            response: Generated response text
+            
+        Returns:
+            True if response indicates uncertainty, False otherwise
+        """
+        uncertainty_phrases = [
+            "don't have enough information",
+            "i don't know",
+            "cannot answer",
+            "not sure",
+            "don't have that information",
+            "insufficient information",
+            "unable to answer",
+            "can't find",
+            "not available",
+            "connect you with a human",
+            "escalate to",
+            "research this further"
+        ]
+        
+        response_lower = response.lower()
+        return any(phrase in response_lower for phrase in uncertainty_phrases)
+    
+    def _format_sources_for_citations(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Format source documents for easy citation and UI display.
+        
+        Args:
+            documents: List of retrieved documents
+            
+        Returns:
+            List of formatted source dictionaries with citation info
+        """
+        formatted = []
+        
+        for idx, doc in enumerate(documents, start=1):
+            metadata = doc.get('metadata', {})
+            
+            # Extract source information
+            source_info = {
+                'citation_id': idx,
+                'citation_label': f"Source {idx}",
+                'text': doc.get('text', ''),
+                'distance': round(doc.get('distance', 0), 3),
+                'relevance': self._distance_to_relevance(doc.get('distance', 1.0)),
+                
+                # Metadata for UI
+                'source_file': metadata.get('filename', metadata.get('source', 'Unknown')),
+                'section': metadata.get('section', 'General'),
+                'chunk_type': metadata.get('chunk_type', 'standard'),
+                
+                # For clickable links
+                'has_file_path': 'source' in metadata,
+                'file_path': metadata.get('source', ''),
+                
+                # Additional context
+                'metadata': metadata
+            }
+            
+            formatted.append(source_info)
+        
+        return formatted
+    
+    def _distance_to_relevance(self, distance: float) -> str:
+        """
+        Convert distance score to human-readable relevance label.
+        
+        Args:
+            distance: FAISS L2 distance score
+            
+        Returns:
+            Relevance label string
+        """
+        if distance < 0.3:
+            return "Highly Relevant"
+        elif distance < 0.6:
+            return "Relevant"
+        elif distance < 1.0:
+            return "Moderately Relevant"
+        else:
+            return "Less Relevant"
+    
     def chat(
         self,
         message: str,
@@ -484,6 +619,9 @@ class RAGPipeline:
             except Exception as e:
                 logger.warning(f"Error during retrieval: {e}. Proceeding without retrieval.")
         
+        # Calculate confidence if we have retrieved docs
+        confidence = self._calculate_confidence(retrieved_docs) if retrieved_docs else 0.0
+        
         # Generate response
         answer = self.llm_service.generate_chat_response(
             query=message,
@@ -491,14 +629,23 @@ class RAGPipeline:
             context=context
         )
         
+        # Detect uncertainty in response
+        is_uncertain = self._detect_uncertainty(answer)
+        
+        # Format sources for citations
+        formatted_sources = self._format_sources_for_citations(retrieved_docs) if retrieved_docs else []
+        
         response = {
             'message': message,
             'answer': answer,
-            'used_retrieval': use_retrieval
+            'confidence': confidence,
+            'is_uncertain': is_uncertain,
+            'used_retrieval': use_retrieval,
+            'sources_available': len(retrieved_docs) > 0 if retrieved_docs else False
         }
         
         if retrieved_docs:
-            response['sources'] = retrieved_docs
+            response['sources'] = formatted_sources
         
         return response
     

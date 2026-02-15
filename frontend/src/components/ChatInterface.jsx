@@ -43,6 +43,8 @@ const ChatInterface = ({ clientId }) => {
                     role: 'assistant',
                     content: response.answer,
                     sources: response.sources || [],
+                    confidence: response.confidence || 0,
+                    is_uncertain: response.is_uncertain || false,
                     timestamp: new Date().toLocaleTimeString(),
                 };
 
@@ -68,6 +70,8 @@ const ChatInterface = ({ clientId }) => {
                     role: 'assistant',
                     content: response.response,
                     sources: response.sources || [],
+                    confidence: response.confidence || 0,
+                    is_uncertain: response.is_uncertain || false,
                     usedRetrieval: response.used_retrieval,
                     timestamp: new Date().toLocaleTimeString(),
                 };
@@ -171,6 +175,27 @@ const ChatInterface = ({ clientId }) => {
 
                                     return (
                                         <>
+                                            {/* Uncertainty Warning */}
+                                            {msg.is_uncertain && (
+                                                <div className="uncertainty-warning">
+                                                    ⚠️ <strong>Limited Information:</strong> This answer may be incomplete or require human verification.
+                                                </div>
+                                            )}
+
+                                            {/* Confidence Indicator */}
+                                            {msg.confidence !== undefined && !msg.is_uncertain && (
+                                                <div className={`confidence-indicator confidence-${msg.confidence >= 0.7 ? 'high' : msg.confidence >= 0.5 ? 'medium' : 'low'}`}>
+                                                    <span className="confidence-label">Confidence:</span>
+                                                    <div className="confidence-bar">
+                                                        <div
+                                                            className="confidence-fill"
+                                                            style={{ width: `${msg.confidence * 100}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className="confidence-value">{Math.round(msg.confidence * 100)}%</span>
+                                                </div>
+                                            )}
+
                                             <div className="message-summary">{firstLine}</div>
                                             {restContent && <div className="message-details">{restContent}</div>}
                                         </>
@@ -189,17 +214,28 @@ const ChatInterface = ({ clientId }) => {
                                             <div className="sources-content">
                                                 {msg.sources.map((source, idx) => (
                                                     <div key={idx} className="source-item">
+                                                        <div className="source-header">
+                                                            <span className="citation-label">
+                                                                [{source.citation_label || `Source ${idx + 1}`}]
+                                                            </span>
+                                                            <span className={`relevance-badge relevance-${(source.relevance || '').toLowerCase().replace(' ', '-')}`}>
+                                                                {source.relevance || 'Relevant'}
+                                                            </span>
+                                                        </div>
                                                         <div className="source-text">{source.text}</div>
-                                                        {source.metadata && (
-                                                            <div className="source-meta">
-                                                                {source.metadata.source && (
-                                                                    <span>📄 {source.metadata.source}</span>
-                                                                )}
-                                                                {source.metadata.page && (
-                                                                    <span>Page {source.metadata.page}</span>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                        <div className="source-meta">
+                                                            {source.source_file && (
+                                                                <span className="source-file">
+                                                                    📄 {source.source_file}
+                                                                    {source.section && ` → ${source.section}`}
+                                                                </span>
+                                                            )}
+                                                            {source.distance !== undefined && (
+                                                                <span className="source-distance" title="Lower is more relevant">
+                                                                    Distance: {source.distance.toFixed(3)}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
