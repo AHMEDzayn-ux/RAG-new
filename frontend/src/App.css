@@ -1,0 +1,166 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 30px 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header-content h1 {
+  font-size: 32px;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.header-content p {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.app-main {
+  flex: 1;
+  padding: 30px 20px;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section {
+  margin-bottom: 30px;
+}
+
+.welcome-section {
+  margin-top: 40px;
+}
+
+.welcome-card {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.welcome-card h2 {
+  color: #333;
+  margin-bottom: 16px;
+  font-size: 28px;
+}
+
+.welcome-card > p {
+  color: #666;
+  margin-bottom: 24px;
+  font-size: 16px;
+}
+
+.welcome-card ol {
+  text-align: left;
+  max-width: 500px;
+  margin: 0 auto 40px;
+  background: #f9f9f9;
+  padding: 24px 24px 24px 44px;
+  border-radius: 8px;
+}
+
+.welcome-card ol li {
+  margin-bottom: 16px;
+  line-height: 1.6;
+  color: #555;
+}
+
+.welcome-card ol li:last-child {
+  margin-bottom: 0;
+}
+
+.welcome-card ol li strong {
+  color: #667eea;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.feature {
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%);
+  border-radius: 8px;
+  transition: transform 0.2s;
+}
+
+.feature:hover {
+  transform: translateY(-4px);
+}
+
+.feature span {
+  font-size: 36px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.feature h4 {
+  color: #333;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.feature p {
+  color: #666;
+  font-size: 14px;
+}
+
+.app-footer {
+  background: white;
+  padding: 20px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  border-top: 1px solid #e0e0e0;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 20px;
+  }
+
+  .header-content h1 {
+    font-size: 24px;
+  }
+
+  .header-content p {
+    font-size: 14px;
+  }
+
+  .app-main {
+    padding: 20px 10px;
+  }
+
+  .welcome-card {
+    padding: 24px;
+  }
+
+  .welcome-card h2 {
+    font-size: 24px;
+  }
+
+  .features {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
