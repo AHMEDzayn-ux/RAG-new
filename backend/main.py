@@ -42,14 +42,11 @@ if settings.environment == "production":
 
 # Configure CORS based on environment
 if settings.environment == "production":
-    # Production: Restrict to specific origins
-    allowed_origins = [
-        "https://yourdomain.com",
-        "https://www.yourdomain.com",
-        "https://app.yourdomain.com"
-    ]
-    allowed_origin_regex = None
-    logger.info(f"CORS restricted to: {allowed_origins}")
+    # Production: Restrict to Vercel deployments and specific origins
+    allowed_origins = []
+    # Allow all Vercel deployments with regex
+    allowed_origin_regex = r"https://rag-new-.*\.vercel\.app"
+    logger.info(f"CORS restricted to Vercel deployments: {allowed_origin_regex}")
 else:
     # Development: Allow localhost + Vercel deployments
     allowed_origins = [

@@ -11,6 +11,7 @@ This RAG system implements comprehensive security measures to protect against co
 **Implementation:** Token bucket algorithm per IP address
 
 **Limits:**
+
 - Health checks: 120 req/min
 - Client management: 60 req/min
 - Query/Chat: 30 req/min (expensive operations)
@@ -18,6 +19,7 @@ This RAG system implements comprehensive security measures to protect against co
 - Default: 60 req/min
 
 **Headers:**
+
 ```
 X-RateLimit-Limit: 30
 X-RateLimit-Remaining: 29
@@ -26,6 +28,7 @@ Retry-After: 45 (when rate limited)
 ```
 
 **Response (429 Too Many Requests):**
+
 ```json
 {
   "detail": "Rate limit exceeded. Please try again later.",
@@ -50,10 +53,12 @@ Permissions-Policy: geolocation=(), microphone=(), camera=()
 ### 3. CORS Configuration
 
 **Development:**
+
 - Allowed origins: `http://localhost:5173`, `http://localhost:3000`
 - All credentials supported
 
 **Production:**
+
 - Restricted to specific domains (configure in `main.py`)
 - Credentials required
 - Limited methods: GET, POST, PUT, DELETE
@@ -62,12 +67,14 @@ Permissions-Policy: geolocation=(), microphone=(), camera=()
 ### 4. Input Validation
 
 **Automatic Detection:**
+
 - SQL injection attempts
 - XSS attacks (script tags, event handlers)
 - Path traversal (../, %2e%2e)
 - Command injection (exec, eval, system)
 
 **Response (400 Bad Request):**
+
 ```json
 {
   "detail": "Invalid request content"
@@ -77,6 +84,7 @@ Permissions-Policy: geolocation=(), microphone=(), camera=()
 ### 5. IP Blocking
 
 **Usage:**
+
 ```python
 # In main.py
 blocked_ips = {"192.168.1.100", "10.0.0.50"}
@@ -84,6 +92,7 @@ app.add_middleware(SecurityMiddleware, blocked_ips=blocked_ips)
 ```
 
 **Response (403 Forbidden):**
+
 ```json
 {
   "detail": "Access forbidden"
@@ -93,11 +102,13 @@ app.add_middleware(SecurityMiddleware, blocked_ips=blocked_ips)
 ### 6. Environment-Based Configuration
 
 **Development:**
+
 - API docs enabled at `/docs` and `/redoc`
 - Permissive CORS for localhost
 - Verbose logging
 
 **Production:**
+
 - API docs disabled
 - CORS restricted to specific domains
 - Trusted host middleware enabled
@@ -110,6 +121,7 @@ app.add_middleware(SecurityMiddleware, blocked_ips=blocked_ips)
 **Never commit `.env` file to Git!**
 
 **Required Variables:**
+
 ```bash
 # API Keys
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxx
@@ -128,6 +140,7 @@ LOG_LEVEL=INFO
 ### .gitignore
 
 Ensured to exclude:
+
 - `.env` files
 - `*.key`, `*.pem`, `*.cert` files
 - `secrets.json`
@@ -146,14 +159,15 @@ Ensured to exclude:
 ### 1. HTTPS Only (Production)
 
 **Nginx Configuration:**
+
 ```nginx
 server {
     listen 443 ssl http2;
     server_name api.yourdomain.com;
-    
+
     ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
-    
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -167,10 +181,12 @@ server {
 ### 2. Database Security
 
 **SQLite (Development):**
+
 - File permissions: `chmod 600 rag_system.db`
 - Backup regularly
 
 **PostgreSQL (Production):**
+
 ```bash
 DATABASE_URL=postgresql://user:password@localhost/rag_db?sslmode=require
 ```
@@ -178,12 +194,14 @@ DATABASE_URL=postgresql://user:password@localhost/rag_db?sslmode=require
 ### 3. File Upload Security
 
 **Current Implementation:**
+
 - Only PDF files accepted
 - Max file size: 10MB (configurable in nginx/FastAPI)
 - Virus scanning recommended (integrate ClamAV)
 - Store in isolated directory
 
 **Recommended Enhancement:**
+
 ```python
 # In documents router
 import magic
@@ -198,17 +216,20 @@ def validate_file(file):
 ### 4. Logging & Monitoring
 
 **What to Log:**
+
 - Rate limit violations
 - Suspicious pattern detections
 - Failed authentication attempts
 - API errors
 
 **What NOT to Log:**
+
 - API keys
 - User passwords
 - Full request bodies (may contain PII)
 
 **Setup Log Rotation:**
+
 ```bash
 # /etc/logrotate.d/rag-api
 /var/log/rag-api/*.log {
@@ -224,6 +245,7 @@ def validate_file(file):
 ### 5. Regular Updates
 
 **Dependencies:**
+
 ```bash
 # Check for vulnerabilities
 pip install safety
@@ -235,6 +257,7 @@ pip install --upgrade package_name
 ```
 
 **Update requirements.txt:**
+
 ```bash
 pip freeze > requirements.txt
 ```
@@ -275,13 +298,14 @@ pip freeze > requirements.txt
    - Block suspicious IPs
 
 2. **Investigation:**
+
    ```bash
    # Check recent access
    grep "WARNING\|ERROR" /var/log/rag-api/*.log | tail -100
-   
+
    # Find rate limit violations
    grep "Rate limit exceeded" /var/log/rag-api/*.log
-   
+
    # Check suspicious patterns
    grep "Suspicious pattern" /var/log/rag-api/*.log
    ```
@@ -327,12 +351,13 @@ with open("blocked_ips.txt") as f:
 ### Alerting
 
 **Setup (example with Prometheus):**
+
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'rag-api'
+  - job_name: "rag-api"
     static_configs:
-      - targets: ['localhost:8000']
+      - targets: ["localhost:8000"]
 
 # Alert rules
 groups:
@@ -392,10 +417,12 @@ if not validate_api_key(api_key):
 ## 📞 Security Contacts
 
 **Report Vulnerabilities:**
+
 - Email: security@yourdomain.com
 - PGP Key: [link to public key]
 
 **Security Team:**
+
 - Lead: [Name]
 - Response Time: < 24 hours for critical issues
 
