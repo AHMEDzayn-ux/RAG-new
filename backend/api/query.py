@@ -51,7 +51,11 @@ async def query_documents(client_id: str, request: QueryRequest):
         result = pipeline.query(
             question=request.question,
             top_k=request.top_k,
-            return_sources=request.include_sources
+            return_sources=request.include_sources,
+            use_hybrid_search=request.use_hybrid_search,
+            use_reranking=request.use_reranking,
+            use_query_rewriting=request.use_query_rewriting,
+            use_hyde=request.use_hyde
         )
         
         # Format sources
@@ -124,7 +128,11 @@ async def chat_with_documents(client_id: str, request: ChatRequest):
             message=request.message,
             conversation_history=history,
             use_retrieval=request.use_retrieval,
-            top_k=request.top_k
+            top_k=request.top_k,
+            use_hybrid_search=request.use_hybrid_search,
+            use_reranking=request.use_reranking,
+            use_query_rewriting=request.use_query_rewriting,
+            use_hyde=request.use_hyde
         )
         
         # Format sources

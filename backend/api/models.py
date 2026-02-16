@@ -88,13 +88,21 @@ class QueryRequest(BaseModel):
     question: str = Field(..., description="The question to ask")
     top_k: int = Field(default=3, ge=1, le=10, description="Number of documents to retrieve")
     include_sources: bool = Field(default=True, description="Include source documents in response")
+    use_hybrid_search: bool = Field(default=True, description="Enable hybrid vector+keyword search")
+    use_reranking: bool = Field(default=True, description="Enable cross-encoder re-ranking")
+    use_query_rewriting: bool = Field(default=False, description="Enable LLM-based query rewriting")
+    use_hyde: bool = Field(default=False, description="Enable HyDE (Hypothetical Document Embeddings)")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "question": "What are the admission requirements?",
                 "top_k": 3,
-                "include_sources": True
+                "include_sources": True,
+                "use_hybrid_search": True,
+                "use_reranking": True,
+                "use_query_rewriting": False,
+                "use_hyde": False
             }
         }
 
@@ -138,6 +146,10 @@ class ChatRequest(BaseModel):
     history: List[ChatMessage] = Field(default=[], description="Previous conversation history")
     use_retrieval: bool = Field(default=True, description="Whether to use document retrieval")
     top_k: int = Field(default=3, ge=1, le=10, description="Number of documents to retrieve")
+    use_hybrid_search: bool = Field(default=True, description="Enable hybrid vector+keyword search")
+    use_reranking: bool = Field(default=True, description="Enable cross-encoder re-ranking")
+    use_query_rewriting: bool = Field(default=False, description="Enable LLM-based query rewriting")
+    use_hyde: bool = Field(default=False, description="Enable HyDE (Hypothetical Document Embeddings)")
     
     class Config:
         json_schema_extra = {

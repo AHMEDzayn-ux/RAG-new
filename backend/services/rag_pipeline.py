@@ -11,6 +11,7 @@ from services.document_loader import DocumentLoader
 from services.embeddings import EmbeddingsService
 from services.vector_store import VectorStoreService
 from services.llm_service import LLMService
+from services.retrieval_optimizer import RetrievalOptimizer
 from logger import get_logger
 from config import get_settings
 
@@ -53,7 +54,10 @@ class RAGPipeline:
         self,
         collection_name: str = "default",
         api_key: Optional[str] = None,
-        system_role: Optional[str] = None
+        system_role: Optional[str] = None,
+        enable_advanced_retrieval: bool = True,
+        vector_weight: float = 0.7,
+        keyword_weight: float = 0.3
     ):
         """
         Initialize the RAG pipeline.
@@ -62,15 +66,31 @@ class RAGPipeline:
             collection_name: Name of the vector store collection
             api_key: Groq API key (optional, uses settings if not provided)
             system_role: System role for LLM responses (e.g., "university advisor")
+            enable_advanced_retrieval: Enable advanced retrieval optimization
+            vector_weight: Weight for vector search in hybrid (0-1)
+            keyword_weight: Weight for keyword search in hybrid (0-1)
         """
         self.collection_name = collection_name
         self.system_role = system_role or "helpful assistant"
+        self.enable_advanced_retrieval = enable_advanced_retrieval
         
         # Initialize all services
         self.doc_loader = DocumentLoader()
         self.embeddings_service = EmbeddingsService()
         self.vector_store = VectorStoreService()
         self.llm_service = LLMService(api_key=api_key)
+        
+        # Initialize advanced retrieval optimizer
+        if enable_advanced_retrieval:
+            self.retrieval_optimizer = RetrievalOptimizer(
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                enable_reranking=True
+            )
+            logger.info("Advanced retrieval optimization ENABLED")
+        else:
+            self.retrieval_optimizer = None
+            logger.info("Advanced retrieval optimization DISABLED")
         
         logger.info(f"RAGPipeline initialized for collection: {collection_name}")
     
@@ -208,6 +228,16 @@ class RAGPipeline:
             metadatas=all_metadatas
         )
         
+        # Step 4.5: Build BM25 index for hybrid search
+        if self.retrieval_optimizer:
+            logger.info("Building BM25 index for hybrid search...")
+            self.retrieval_optimizer.build_bm25_index(
+                collection_name=self.collection_name,
+                documents=all_texts,
+                doc_ids=list(range(len(all_texts)))
+            )
+            logger.info("BM25 index built successfully")
+        
         # Step 5: Persist to disk
         self.vector_store.persist()
         logger.info("Vector store persisted to disk")
@@ -229,28 +259,41 @@ class RAGPipeline:
         question: str,
         top_k: Optional[int] = None,
         return_sources: bool = True,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        use_hybrid_search: bool = True,
+        use_reranking: bool = True,
+        use_query_rewriting: bool = False,
+        use_hyde: bool = False
     ) -> Dict[str, Any]:
         """
         Query the RAG system with advanced retrieval strategies.
         
         Complete workflow:
-        1. Generate embedding for question
-        2. Retrieve relevant documents from vector store (with metadata filtering)
-        3. Filter by section if query intent detected
-        4. Retrieve parent chunks if using parent-child strategy
-        5. Generate response using LLM with context
+        1. Optional: Query transformation (rewriting or HyDE)
+        2. Generate embedding for question
+        3. Retrieve relevant documents from vector store (with metadata filtering)
+        4. Optional: Hybrid search (vector + BM25)
+        5. Optional: Re-ranking with cross-encoder
+        6. Filter by section if query intent detected
+        7. Retrieve parent chunks if using parent-child strategy
+        8. Generate response using LLM with context
         
         Args:
             question: User's question
             top_k: Number of documents to retrieve (default from settings)
             return_sources: Whether to include source documents in response
             metadata_filter: Optional metadata filter (e.g., {"user_tier": "enterprise"})
+            use_hybrid_search: Enable hybrid vector+keyword search
+            use_reranking: Enable cross-encoder re-ranking
+            use_query_rewriting: Enable query rewriting
+            use_hyde: Enable HyDE (hypothetical document embeddings)
         
         Returns:
             Dictionary with answer and optional sources
         """
         logger.info(f"Processing query: {question}")
+        logger.info(f"Advanced features: hybrid={use_hybrid_search}, rerank={use_reranking}, "
+                   f"rewrite={use_query_rewriting}, hyde={use_hyde}")
         
         # Detect query intent for section filtering
         target_section = self._detect_query_section(question)
@@ -261,17 +304,44 @@ class RAGPipeline:
             combined_filter['section'] = target_section
             logger.info(f"Detected query intent: {target_section}")
         
-        # Step 1: Generate query embedding
-        query_embedding = self.embeddings_service.embed_text(question)
+        # Step 1: Optional query transformation
+        search_query = question
+        optimization_metadata = {'transformations': []}
+        
+        if self.retrieval_optimizer and (use_query_rewriting or use_hyde):
+            if use_hyde:
+                # HyDE: Generate hypothetical answer
+                search_query = self.retrieval_optimizer.hyde_query(
+                    question,
+                    self.llm_service,
+                    self.system_role
+                )
+                optimization_metadata['transformations'].append('hyde')
+                logger.info("Applied HyDE transformation")
+            elif use_query_rewriting:
+                # Query rewriting
+                search_query = self.retrieval_optimizer.rewrite_query(
+                    question,
+                    self.llm_service
+                )
+                optimization_metadata['transformations'].append('query_rewriting')
+                logger.info(f"Rewrote query: '{question}' → '{search_query}'")
+        
+        # Step 2: Generate query embedding (use transformed query)
+        query_embedding = self.embeddings_service.embed_text(search_query)
         logger.info("Generated query embedding")
-        # Step 2: Retrieve relevant documents with metadata filter
+        
+        # Step 3: Retrieve relevant documents with metadata filter
         top_k = top_k or settings.retrieval_top_k
+        
+        # Retrieve more candidates if using advanced retrieval
+        initial_k = top_k * 10 if (self.retrieval_optimizer and (use_hybrid_search or use_reranking)) else top_k
         
         try:
             results = self.vector_store.query(
                 collection_name=self.collection_name,
                 query_embeddings=[query_embedding],
-                n_results=top_k,
+                n_results=initial_k,
                 metadata_filter=combined_filter if combined_filter else None
             )
         except Exception as e:
@@ -291,20 +361,42 @@ class RAGPipeline:
                 retrieved_docs.append({
                     'text': doc,
                     'metadata': doc_metadata,
-                    'distance': results['distances'][0][i]
+                    'distance': results['distances'][0][i],
+                    'doc_id': i  # Track original position
                 })
         
-        # Step 3: Retrieve parent chunks if using parent-child strategy
+        logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
+        
+        # Step 4: Apply advanced retrieval optimization
+        if self.retrieval_optimizer and retrieved_docs:
+            if use_hybrid_search or use_reranking:
+                optimized_docs, opt_meta = self.retrieval_optimizer.optimize_retrieval(
+                    collection_name=self.collection_name,
+                    query=question,  # Use ORIGINAL query for reranking
+                    vector_results=retrieved_docs,
+                    llm_service=self.llm_service,
+                    use_hybrid=use_hybrid_search,
+                    use_reranking=use_reranking,
+                    use_query_rewriting=False,  # Already done above
+                    use_hyde=False,  # Already done above
+                    top_k_initial=50,
+                    top_k_final=top_k
+                )
+                retrieved_docs = optimized_docs
+                optimization_metadata.update(opt_meta)
+                logger.info(f"Applied optimization: {opt_meta['transformations']}")
+        
+        # Step 5: Retrieve parent chunks if using parent-child strategy
         if retrieved_docs and any(doc['metadata'].get('has_parent') for doc in retrieved_docs):
             retrieved_docs = self._retrieve_parent_chunks(retrieved_docs)
             logger.info("Replaced child chunks with parent chunks for full context")
         
-        logger.info(f"Retrieved {len(retrieved_docs)} relevant documents")
+        logger.info(f"Final document count: {len(retrieved_docs)}")
         
-        # Step 4: Calculate confidence score based on retrieval distances
+        # Step 6: Calculate confidence score based on retrieval distances
         confidence = self._calculate_confidence(retrieved_docs) if retrieved_docs else 0.0
         
-        # Step 5: Generate response using LLM
+        # Step 7: Generate response using LLM
         try:
             answer = self.llm_service.generate_rag_response(
                 query=question,
@@ -317,10 +409,10 @@ class RAGPipeline:
         
         logger.info("Generated response")
         
-        # Step 6: Detect if response is an "I don't know" type
+        # Step 8: Detect if response is an "I don't know" type
         is_uncertain = self._detect_uncertainty(answer)
         
-        # Step 7: Format sources for citations
+        # Step 9: Format sources for citations
         formatted_sources = self._format_sources_for_citations(retrieved_docs) if retrieved_docs else []
         
         # Prepare response
@@ -330,7 +422,8 @@ class RAGPipeline:
             'confidence': confidence,
             'is_uncertain': is_uncertain,
             'num_sources': len(retrieved_docs),
-            'sources_available': len(retrieved_docs) > 0
+            'sources_available': len(retrieved_docs) > 0,
+            'optimization_used': optimization_metadata if self.retrieval_optimizer else None
         }
         
         if return_sources:
@@ -552,7 +645,11 @@ class RAGPipeline:
         conversation_history: List[Dict[str, str]],
         use_retrieval: bool = True,
         top_k: Optional[int] = None,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        use_hybrid_search: bool = True,
+        use_reranking: bool = True,
+        use_query_rewriting: bool = False,
+        use_hyde: bool = False
     ) -> Dict[str, Any]:
         """
         Conversational query with history and advanced retrieval.
@@ -563,11 +660,17 @@ class RAGPipeline:
             use_retrieval: Whether to retrieve context from vector store
             top_k: Number of documents to retrieve if using retrieval
             metadata_filter: Optional metadata filter for retrieval
+            use_hybrid_search: Enable hybrid vector+keyword search
+            use_reranking: Enable cross-encoder re-ranking
+            use_query_rewriting: Enable query rewriting
+            use_hyde: Enable HyDE (hypothetical document embeddings)
         
         Returns:
             Dictionary with response and conversation info
         """
         logger.info(f"Processing chat message: {message}")
+        logger.info(f"Advanced features: hybrid={use_hybrid_search}, rerank={use_reranking}, "
+                   f"rewrite={use_query_rewriting}, hyde={use_hyde}")
         
         # Detect query intent for section filtering
         target_section = self._detect_query_section(message)
@@ -580,17 +683,44 @@ class RAGPipeline:
         
         context = None
         retrieved_docs = None
+        optimization_metadata = {'transformations': []}
         
         # Retrieve context if requested
         if use_retrieval:
             try:
-                query_embedding = self.embeddings_service.embed_text(message)
+                # Step 1: Optional query transformation
+                search_query = message
+                
+                if self.retrieval_optimizer and (use_query_rewriting or use_hyde):
+                    if use_hyde:
+                        # HyDE: Generate hypothetical answer
+                        search_query = self.retrieval_optimizer.hyde_query(
+                            message,
+                            self.llm_service,
+                            self.system_role
+                        )
+                        optimization_metadata['transformations'].append('hyde')
+                        logger.info("Applied HyDE transformation")
+                    elif use_query_rewriting:
+                        # Query rewriting
+                        search_query = self.retrieval_optimizer.rewrite_query(
+                            message,
+                            self.llm_service
+                        )
+                        optimization_metadata['transformations'].append('query_rewriting')
+                        logger.info(f"Rewrote query: '{message}' → '{search_query}'")
+                
+                # Step 2: Generate query embedding (use transformed query)
+                query_embedding = self.embeddings_service.embed_text(search_query)
                 top_k = top_k or settings.retrieval_top_k
+                
+                # Retrieve more candidates if using advanced retrieval
+                initial_k = top_k * 10 if (self.retrieval_optimizer and (use_hybrid_search or use_reranking)) else top_k
                 
                 results = self.vector_store.query(
                     collection_name=self.collection_name,
                     query_embeddings=[query_embedding],
-                    n_results=top_k,
+                    n_results=initial_k,
                     metadata_filter=combined_filter if combined_filter else None
                 )
                 
@@ -601,19 +731,41 @@ class RAGPipeline:
                         {
                             'text': doc,
                             'metadata': results['metadatas'][0][i] if results.get('metadatas') else {},
-                            'distance': results['distances'][0][i] if results.get('distances') else 0
+                            'distance': results['distances'][0][i] if results.get('distances') else 0,
+                            'doc_id': i
                         }
                         for i, doc in enumerate(context)
                         if not results['metadatas'][0][i].get('content_type') == 'question'  # Skip questions
                     ]
                     
-                    # Retrieve parent chunks if using parent-child
+                    logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
+                    
+                    # Step 3: Apply advanced retrieval optimization
+                    if self.retrieval_optimizer and retrieved_docs:
+                        if use_hybrid_search or use_reranking:
+                            optimized_docs, opt_meta = self.retrieval_optimizer.optimize_retrieval(
+                                collection_name=self.collection_name,
+                                query=message,  # Use ORIGINAL query for reranking
+                                vector_results=retrieved_docs,
+                                llm_service=self.llm_service,
+                                use_hybrid=use_hybrid_search,
+                                use_reranking=use_reranking,
+                                use_query_rewriting=False,  # Already done above
+                                use_hyde=False,  # Already done above
+                                top_k_initial=50,
+                                top_k_final=top_k
+                            )
+                            retrieved_docs = optimized_docs
+                            optimization_metadata.update(opt_meta)
+                            logger.info(f"Applied optimization: {opt_meta['transformations']}")
+                    
+                    # Step 4: Retrieve parent chunks if using parent-child
                     if retrieved_docs and any(doc['metadata'].get('has_parent') for doc in retrieved_docs):
                         retrieved_docs = self._retrieve_parent_chunks(retrieved_docs)
-                        context = [doc['text'] for doc in retrieved_docs]
                         logger.info(f"Retrieved parent chunks for full context")
                     
-                    logger.info(f"Retrieved {len(retrieved_docs)} documents")
+                    context = [doc['text'] for doc in retrieved_docs]
+                    logger.info(f"Final document count: {len(retrieved_docs)}")
                 else:
                     logger.info("No documents found in collection for retrieval")
             except Exception as e:
@@ -641,7 +793,8 @@ class RAGPipeline:
             'confidence': confidence,
             'is_uncertain': is_uncertain,
             'used_retrieval': use_retrieval,
-            'sources_available': len(retrieved_docs) > 0 if retrieved_docs else False
+            'sources_available': len(retrieved_docs) > 0 if retrieved_docs else False,
+            'optimization_used': optimization_metadata if self.retrieval_optimizer else None
         }
         
         if retrieved_docs:
