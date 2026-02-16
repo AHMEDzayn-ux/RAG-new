@@ -1,37 +1,72 @@
 """
 FastAPI Application for Multi-Tenant RAG Chatbot System
-Phase 7: REST API Implementation
+Phase 7: REST API Implementation with Security
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from logger import get_logger
 from api.clients import router as clients_router
 from api.documents import router as documents_router
 from api.query import router as query_router
 from config import settings
+from security import SecurityMiddleware
 
 logger = get_logger(__name__)
 
 # Log configuration at startup
 logger.info(f"Starting RAG API...")
+logger.info(f"Environment: {settings.environment}")
 logger.info(f"Groq API Key configured: {bool(settings.groq_api_key)}")
 logger.info(f"LLM Model: {settings.llm_model}")
 
 # Initialize FastAPI app
 app = FastAPI(
     title="RAG Chatbot API",
-    description="Multi-tenant RAG system for customizable AI chatbots",
-    version="1.0.0"
+    description="Multi-tenant RAG system with advanced security and retrieval optimization",
+    version="2.0.0",
+    docs_url="/docs" if settings.environment == "development" else None,  # Disable docs in production
+    redoc_url="/redoc" if settings.environment == "development" else None
 )
 
-# Configure CORS for frontend access
+# Security Middleware (rate limiting, headers, validation)
+app.add_middleware(SecurityMiddleware)
+
+# Trusted Host Middleware (prevent host header attacks)
+if settings.environment == "production":
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=["api.yourdomain.com", "localhost", "127.0.0.1"]
+    )
+
+# Configure CORS based on environment
+if settings.environment == "production":
+    # Production: Restrict to specific origins
+    allowed_origins = [
+        "https://yourdomain.com",
+        "https://www.yourdomain.com",
+        "https://app.yourdomain.com"
+    ]
+    logger.info(f"CORS restricted to: {allowed_origins}")
+else:
+    # Development: Allow localhost
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000"
+    ]
+    logger.info("CORS enabled for local development")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Will restrict in production
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
+    expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+    max_age=3600,
 )
 
 # Include routers
