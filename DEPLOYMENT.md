@@ -35,6 +35,7 @@ git push origin main
    - Select: **`AHMEDzayn-ux/RAG-new`**
 
 3. **Configure Service:**
+
    ```
    Name: rag-backend
    Region: Oregon (or closest to you)
@@ -47,12 +48,13 @@ git push origin main
    ```
 
 4. **Environment Variables** (Click "Add Environment Variable"):
+
    ```
    GROQ_API_KEY = your_actual_groq_api_key_here
    ENVIRONMENT = production
    LOG_LEVEL = INFO
    ```
-   
+
    ⚠️ **IMPORTANT:** Copy your actual Groq API key from your local `.env` file!
 
 5. Click **"Create Web Service"**
@@ -78,11 +80,12 @@ git push origin main
 3. Click **"Settings"** → **"Environment Variables"**
 
 4. **Add New Variable:**
+
    ```
    Key: VITE_API_URL
    Value: https://rag-backend.onrender.com
           ☝️ Use YOUR actual Render URL from above
-   
+
    Environment: Production, Preview, Development (check all)
    ```
 
@@ -165,11 +168,13 @@ curl https://rag-backend.onrender.com/health
 ## ⚙️ Configuration Files
 
 ### backend/Procfile
+
 ```
 web: uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
 ### render.yaml
+
 ```yaml
 services:
   - type: web
@@ -183,6 +188,7 @@ services:
 ```
 
 ### Vercel Environment Variable
+
 ```
 VITE_API_URL=https://rag-backend.onrender.com
 ```
@@ -203,16 +209,19 @@ VITE_API_URL=https://rag-backend.onrender.com
 ### Free Tier Limitations
 
 **Render Free Tier:**
+
 - Backend sleeps after 15 minutes of inactivity
 - First request after sleep takes ~30-60 seconds (cold start)
 - 750 hours/month of runtime (enough for most use)
 - **Solution:** Keep-alive ping service (optional)
 
 **Keep Backend Awake (Optional):**
+
 ```bash
 # Add this to a cron job or UptimeRobot
 curl https://rag-backend.onrender.com/health
 ```
+
 Run every 10 minutes to prevent sleep.
 
 ---
@@ -223,7 +232,8 @@ Run every 10 minutes to prevent sleep.
 
 **Cause:** Backend is sleeping (Render free tier)
 
-**Solution:** 
+**Solution:**
+
 - Wait 30-60 seconds and refresh
 - First request wakes up the service
 - Subsequent requests are fast
@@ -231,17 +241,20 @@ Run every 10 minutes to prevent sleep.
 ### Issue: CORS Error
 
 **Symptoms:**
+
 ```
 Access to XMLHttpRequest blocked by CORS policy
 ```
 
 **Solutions:**
+
 1. Check Render logs: Is backend running?
 2. Verify ENVIRONMENT=production set in Render
 3. Check Vercel has correct VITE_API_URL
 4. Redeploy both frontend and backend
 
 **Debug:**
+
 ```bash
 # Check CORS headers
 curl -I https://rag-backend.onrender.com/api/clients/ \
@@ -254,6 +267,7 @@ curl -I https://rag-backend.onrender.com/api/clients/ \
 ### Issue: "Unable to load clients"
 
 **Checklist:**
+
 - [ ] Backend deployed and live
 - [ ] Environment variable VITE_API_URL set in Vercel
 - [ ] Frontend redeployed after setting env var
@@ -262,8 +276,12 @@ curl -I https://rag-backend.onrender.com/api/clients/ \
 ### Issue: Rate Limiting
 
 **Symptoms:**
+
 ```json
-{"detail":"Rate limit exceeded. Please try again later.","retry_after":"45"}
+{
+  "detail": "Rate limit exceeded. Please try again later.",
+  "retry_after": "45"
+}
 ```
 
 **Cause:** Exceeded 30 requests/minute
@@ -320,23 +338,25 @@ git push origin main
 
 ### Current Setup (FREE!)
 
-| Service | Plan | Cost | Limits |
-|---------|------|------|--------|
-| Render | Free | $0/mo | 750 hrs/mo, sleeps after 15min |
-| Vercel | Hobby | $0/mo | 100 GB bandwidth/mo |
-| Groq API | Free | $0/mo | Rate limited |
-| GitHub | Free | $0/mo | Unlimited public repos |
+| Service  | Plan  | Cost  | Limits                         |
+| -------- | ----- | ----- | ------------------------------ |
+| Render   | Free  | $0/mo | 750 hrs/mo, sleeps after 15min |
+| Vercel   | Hobby | $0/mo | 100 GB bandwidth/mo            |
+| Groq API | Free  | $0/mo | Rate limited                   |
+| GitHub   | Free  | $0/mo | Unlimited public repos         |
 
 **Total: $0/month** 🎉
 
 ### Upgrade Options (Optional)
 
 **Render Starter ($7/mo):**
+
 - No sleep (always on)
 - Better performance
 - More RAM
 
 **Vercel Pro ($20/mo):**
+
 - More bandwidth
 - Analytics
 - Better support
@@ -358,14 +378,17 @@ git push origin main
 ## 🆘 Support
 
 **Render Support:**
+
 - Docs: https://render.com/docs
 - Community: https://community.render.com
 
 **Vercel Support:**
+
 - Docs: https://vercel.com/docs
 - Discord: https://vercel.com/discord
 
 **Project Issues:**
+
 - GitHub: https://github.com/AHMEDzayn-ux/RAG-new/issues
 
 ---

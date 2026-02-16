@@ -295,14 +295,15 @@ class RAGPipeline:
         logger.info(f"Advanced features: hybrid={use_hybrid_search}, rerank={use_reranking}, "
                    f"rewrite={use_query_rewriting}, hyde={use_hyde}")
         
-        # Detect query intent for section filtering
-        target_section = self._detect_query_section(question)
+        # Detect query intent for section filtering (disabled - too restrictive for CV use cases)
+        # target_section = self._detect_query_section(question)
         
-        # Build metadata filter
+        # Build metadata filter (without automatic section filtering)
         combined_filter = metadata_filter.copy() if metadata_filter else {}
-        if target_section:
-            combined_filter['section'] = target_section
-            logger.info(f"Detected query intent: {target_section}")
+        # Disabled automatic section filtering - it was too restrictive
+        # if target_section:
+        #     combined_filter['section'] = target_section
+        #     logger.info(f"Detected query intent: {target_section}")
         
         # Step 1: Optional query transformation
         search_query = question
@@ -447,6 +448,87 @@ class RAGPipeline:
                 if re.search(pattern, query):
                     return section
         return None
+    
+    def _expand_query_with_history(self, query: str, conversation_history: List[Dict[str, str]]) -> str:
+        """
+        Expand queries containing pronouns or vague references by incorporating context from recent conversation.
+        
+        Args:
+            query: Current user query
+            conversation_history: Previous conversation messages
+            
+        Returns:
+            Expanded query with pronouns/vague terms replaced/supplemented with context
+        """
+        import re
+        
+        # Check if query contains pronouns or vague references
+        pronouns = ['it', 'that', 'this', 'these', 'those', 'them', 'his', 'her', 'their', 'about']
+        vague_terms = ['results', 'details', 'information', 'more', 'other']
+        
+        query_lower = query.lower()
+        
+        has_pronoun = any(re.search(rf'\b{pronoun}\b', query_lower) for pronoun in pronouns)
+        has_vague_term = any(word in query_lower for word in vague_terms)
+        
+        logger.info(f"Query expansion check - Query: '{query}', Has pronoun: {has_pronoun}, Has vague term: {has_vague_term}, History length: {len(conversation_history)}")
+        
+        if (not has_pronoun and not has_vague_term) or not conversation_history:
+            return query
+        
+        # Get the last user message 
+        recent_context = []
+        for msg in conversation_history[-3:]:  # Last 3 messages for better context
+            if msg.get('role') == 'user' and len(msg.get('content', '')) > 0:
+                recent_context.append(msg['content'])
+        
+        logger.info(f"Recent context: {recent_context}")
+        
+        if not recent_context:
+            return query
+        
+        # Extract key entities from recent conversation
+        last_user_query = recent_context[-1]
+        
+        # Extract key phrases that might be referenced by pronouns/vague terms
+        entities = []
+        
+        # Ordinary Level patterns (check this FIRST before Advanced Level)
+        if re.search(r'\b(ordinary level|o-?level|o/l)\b', last_user_query, re.I):
+            entities.append('Ordinary Level results')
+        # Advanced Level patterns
+        elif re.search(r'\b(advanced level|a-?level|a/l)\b', last_user_query, re.I):
+            entities.append('Advanced Level results')
+        # General education patterns
+        elif re.search(r'\b(education|degree|university|school|college)\b', last_user_query, re.I):
+            entities.append('education')
+        
+        # Work patterns  
+        if re.search(r'\b(work|job|employment|career)\b', last_user_query, re.I):
+            entities.append('work experience')
+        
+        # Skills patterns
+        if re.search(r'\b(skills|technical|competencies)\b', last_user_query, re.I):
+            entities.append('skills')
+        
+        # Volunteer patterns
+        if re.search(r'\b(volunteer|extracurricular|organizing)\b', last_user_query, re.I):
+            entities.append('volunteering')
+        
+        # Projects patterns
+        if re.search(r'\b(projects|portfolio|built|developed)\b', last_user_query, re.I):
+            entities.append('projects')
+        
+        logger.info(f"Extracted entities: {entities}")
+        
+        # If we found entities, expand the query
+        if entities:
+            # Append the most recent entity context to the query
+            expanded = f"{query} {entities[0]}"
+            logger.info(f"Expanded query: '{query}' → '{expanded}'")
+            return expanded
+        
+        return query
     
     def _filter_by_section(self, documents: List[Dict[str, Any]], section: str) -> List[Dict[str, Any]]:
         """
@@ -672,14 +754,15 @@ class RAGPipeline:
         logger.info(f"Advanced features: hybrid={use_hybrid_search}, rerank={use_reranking}, "
                    f"rewrite={use_query_rewriting}, hyde={use_hyde}")
         
-        # Detect query intent for section filtering
-        target_section = self._detect_query_section(message)
+        # Detect query intent for section filtering (disabled - too restrictive for CV use cases)
+        # target_section = self._detect_query_section(message)
         
-        # Build combined metadata filter
+        # Build combined metadata filter (without automatic section filtering)
         combined_filter = metadata_filter.copy() if metadata_filter else {}
-        if target_section:
-            combined_filter['section'] = target_section
-            logger.info(f"Detected chat query intent: {target_section}")
+        # Disabled automatic section filtering - it was too restrictive
+        # if target_section:
+        #     combined_filter['section'] = target_section
+        #     logger.info(f"Detected chat query intent: {target_section}")
         
         context = None
         retrieved_docs = None
@@ -688,9 +771,13 @@ class RAGPipeline:
         # Retrieve context if requested
         if use_retrieval:
             try:
-                # Step 1: Optional query transformation
-                search_query = message
+                # Step 0: Expand query if it contains pronouns by incorporating recent conversation history
+                search_query = self._expand_query_with_history(message, conversation_history)
+                if search_query != message:
+                    logger.info(f"Expanded query: '{message}' → '{search_query}'")
+                    optimization_metadata['transformations'].append('query_expansion')
                 
+                # Step 1: Optional query transformation
                 if self.retrieval_optimizer and (use_query_rewriting or use_hyde):
                     if use_hyde:
                         # HyDE: Generate hypothetical answer
@@ -774,10 +861,11 @@ class RAGPipeline:
         # Calculate confidence if we have retrieved docs
         confidence = self._calculate_confidence(retrieved_docs) if retrieved_docs else 0.0
         
-        # Generate response
+        # Generate response (limit conversation history to save tokens)
+        limited_history = conversation_history[-3:] if len(conversation_history) > 3 else conversation_history
         answer = self.llm_service.generate_chat_response(
             query=message,
-            conversation_history=conversation_history,
+            conversation_history=limited_history,
             context=context
         )
         

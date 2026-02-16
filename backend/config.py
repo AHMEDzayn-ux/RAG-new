@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     vector_stores_dir: Path = Path(__file__).parent.parent / "vector_stores"
     
     # Document Processing
-    default_chunk_size: int = 1000
-    default_chunk_overlap: int = 200
+    default_chunk_size: int = 800
+    default_chunk_overlap: int = 150
     
     # Vector Store
     vector_store_type: str = "chromadb"
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # LLM
     llm_model: str = "llama-3.3-70b-versatile"
     llm_temperature: float = 0.7
-    llm_max_tokens: int = 1024
+    llm_max_tokens: int = 512
     
     # Retrieval
     retrieval_top_k: int = 3
