@@ -48,20 +48,24 @@ if settings.environment == "production":
         "https://www.yourdomain.com",
         "https://app.yourdomain.com"
     ]
+    allowed_origin_regex = None
     logger.info(f"CORS restricted to: {allowed_origins}")
 else:
-    # Development: Allow localhost
+    # Development: Allow localhost + Vercel deployments
     allowed_origins = [
         "http://localhost:5173",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
     ]
-    logger.info("CORS enabled for local development")
+    # Allow all Vercel preview deployments with regex
+    allowed_origin_regex = r"https://rag-new-.*\.vercel\.app"
+    logger.info("CORS enabled for local development + Vercel")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
