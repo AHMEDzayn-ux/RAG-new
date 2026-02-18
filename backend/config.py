@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     vector_stores_dir: Path = Path(__file__).parent.parent / "vector_stores"
     
     # Document Processing
-    default_chunk_size: int = 800
-    default_chunk_overlap: int = 150
+    default_chunk_size: int = 1200
+    default_chunk_overlap: int = 200
     
     # Vector Store
     vector_store_type: str = "chromadb"
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 512
     
     # Retrieval
-    retrieval_top_k: int = 3
+    retrieval_top_k: int = 6
     
     model_config = SettingsConfigDict(
         env_file=".env",

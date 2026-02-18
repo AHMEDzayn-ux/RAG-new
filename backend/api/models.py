@@ -86,7 +86,7 @@ class DocumentListResponse(BaseModel):
 class QueryRequest(BaseModel):
     """Request model for RAG query."""
     question: str = Field(..., description="The question to ask")
-    top_k: int = Field(default=3, ge=1, le=10, description="Number of documents to retrieve")
+    top_k: int = Field(default=6, ge=1, le=15, description="Number of documents to retrieve")
     include_sources: bool = Field(default=True, description="Include source documents in response")
     use_hybrid_search: bool = Field(default=True, description="Enable hybrid vector+keyword search")
     use_reranking: bool = Field(default=True, description="Enable cross-encoder re-ranking")
