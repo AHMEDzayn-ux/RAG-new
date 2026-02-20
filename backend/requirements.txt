@@ -36,3 +36,6 @@ httpx>=0.26.0
 # Utilities
 pydantic>=2.5.3
 pydantic-settings>=2.1.0
+
+# WhatsApp Integration
+requests>=2.31.0

@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     multi_query_variations: int = 3
     multi_query_boost_original: float = 1.5
     
+    # WhatsApp Integration
+    whatsapp_verify_token: str = "your_verify_token_here"
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_business_account_id: str = ""
+    whatsapp_client_id: str = "customer_care_test"  # Default client for WhatsApp
+    whatsapp_bot_name: str = "Customer Support"
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
