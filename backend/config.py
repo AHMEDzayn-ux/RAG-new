@@ -49,10 +49,20 @@ class Settings(BaseSettings):
     # LLM
     llm_model: str = "llama-3.3-70b-versatile"
     llm_temperature: float = 0.7
-    llm_max_tokens: int = 512
+    llm_max_tokens: int = 2048  # Increased from 512 to allow complete responses
     
     # Retrieval
-    retrieval_top_k: int = 6
+    retrieval_top_k: int = 10  # Increased from 6 to 10 for more comprehensive answers
+    
+    # Advanced Retrieval Features (ordered by cost-effectiveness)
+    use_query_normalization: bool = True  # NEW - lightweight, enabled by default
+    use_hybrid_search: bool = True
+    use_reranking: bool = True
+    use_query_rewriting: bool = False  # More expensive alternative to normalization
+    use_hyde: bool = False
+    use_multi_query: bool = False  # Most comprehensive but expensive - use for critical queries
+    multi_query_variations: int = 3
+    multi_query_boost_original: float = 1.5
     
     model_config = SettingsConfigDict(
         env_file=".env",

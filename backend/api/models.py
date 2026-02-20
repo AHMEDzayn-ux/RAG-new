@@ -56,6 +56,7 @@ class DocumentUploadResponse(BaseModel):
     files_processed: int
     chunks_created: int
     total_documents: int
+    chunk_previews: List[Dict[str, Any]] = Field(default_factory=list, description="Preview of created chunks")
     
     class Config:
         json_schema_extra = {
@@ -63,7 +64,15 @@ class DocumentUploadResponse(BaseModel):
                 "message": "Documents uploaded successfully",
                 "files_processed": 2,
                 "chunks_created": 45,
-                "total_documents": 47
+                "total_documents": 47,
+                "chunk_previews": [
+                    {
+                        "chunk_index": 0,
+                        "text_preview": "This is the beginning of the document...",
+                        "chunk_size": 512,
+                        "metadata": {"source": "document.pdf", "page": 1}
+                    }
+                ]
             }
         }
 
@@ -90,8 +99,11 @@ class QueryRequest(BaseModel):
     include_sources: bool = Field(default=True, description="Include source documents in response")
     use_hybrid_search: bool = Field(default=True, description="Enable hybrid vector+keyword search")
     use_reranking: bool = Field(default=True, description="Enable cross-encoder re-ranking")
+    use_query_normalization: bool = Field(default=True, description="Enable smart query normalization (abbreviations, typos, semantic expansion)")
     use_query_rewriting: bool = Field(default=False, description="Enable LLM-based query rewriting")
     use_hyde: bool = Field(default=False, description="Enable HyDE (Hypothetical Document Embeddings)")
+    use_multi_query: bool = Field(default=False, description="Enable multi-query RAG fusion (generates query variations)")
+    num_query_variations: int = Field(default=3, ge=2, le=5, description="Number of query variations for multi-query")
     
     class Config:
         json_schema_extra = {
@@ -101,8 +113,11 @@ class QueryRequest(BaseModel):
                 "include_sources": True,
                 "use_hybrid_search": True,
                 "use_reranking": True,
+                "use_query_normalization": True,
                 "use_query_rewriting": False,
-                "use_hyde": False
+                "use_hyde": False,
+                "use_multi_query": False,
+                "num_query_variations": 3
             }
         }
 
@@ -148,8 +163,11 @@ class ChatRequest(BaseModel):
     top_k: int = Field(default=3, ge=1, le=10, description="Number of documents to retrieve")
     use_hybrid_search: bool = Field(default=True, description="Enable hybrid vector+keyword search")
     use_reranking: bool = Field(default=True, description="Enable cross-encoder re-ranking")
+    use_query_normalization: bool = Field(default=True, description="Enable smart query normalization (abbreviations, typos, semantic expansion)")
     use_query_rewriting: bool = Field(default=False, description="Enable LLM-based query rewriting")
     use_hyde: bool = Field(default=False, description="Enable HyDE (Hypothetical Document Embeddings)")
+    use_multi_query: bool = Field(default=False, description="Enable multi-query RAG fusion (generates query variations)")
+    num_query_variations: int = Field(default=3, ge=2, le=5, description="Number of query variations for multi-query")
     
     class Config:
         json_schema_extra = {
@@ -160,7 +178,10 @@ class ChatRequest(BaseModel):
                     {"role": "assistant", "content": "The requirements include..."}
                 ],
                 "use_retrieval": True,
-                "top_k": 3
+                "top_k": 3,
+                "use_query_normalization": True,
+                "use_multi_query": False,
+                "num_query_variations": 3
             }
         }
 

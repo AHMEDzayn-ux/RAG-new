@@ -12,6 +12,9 @@ pypdf>=3.17.4
 # Embeddings
 sentence-transformers>=2.3.1
 
+# Tokenization (for production-grade chunking)
+tiktoken>=0.5.2
+
 # Advanced Retrieval Optimization
 rank-bm25>=0.2.2  # BM25 keyword search for hybrid retrieval
 

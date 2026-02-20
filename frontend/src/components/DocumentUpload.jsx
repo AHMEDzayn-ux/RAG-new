@@ -9,6 +9,8 @@ const DocumentUpload = ({ clientId }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [chunkPreviews, setChunkPreviews] = useState([]);
+    const [showChunks, setShowChunks] = useState(false);
 
     useEffect(() => {
         if (clientId) {
@@ -32,8 +34,12 @@ const DocumentUpload = ({ clientId }) => {
     const handleFileSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
-            if (file.type !== 'application/pdf') {
-                setError('Please select a PDF file');
+            // Accept PDF and JSON files
+            const validTypes = ['application/pdf', 'application/json'];
+            const isValidType = validTypes.includes(file.type) || file.name.endsWith('.json') || file.name.endsWith('.pdf');
+
+            if (!isValidType) {
+                setError('Please select a PDF or JSON file');
                 setSelectedFile(null);
                 return;
             }
@@ -53,7 +59,18 @@ const DocumentUpload = ({ clientId }) => {
             setUploading(true);
             setError('');
             const data = await uploadDocument(clientId, selectedFile);
+            console.log('Upload response:', data);  // Debug logging
             setSuccess(`✓ Uploaded "${selectedFile.name}" - ${data.chunks_created} chunks created`);
+
+            // Store chunk previews if available
+            if (data.chunk_previews && data.chunk_previews.length > 0) {
+                console.log('Chunk previews:', data.chunk_previews.length);  // Debug logging
+                setChunkPreviews(data.chunk_previews);
+                setShowChunks(true);
+            } else {
+                console.log('No chunk previews in response');  // Debug logging
+            }
+
             setSelectedFile(null);
             // Reset file input
             document.getElementById('file-input').value = '';
@@ -104,12 +121,12 @@ const DocumentUpload = ({ clientId }) => {
                     <input
                         id="file-input"
                         type="file"
-                        accept=".pdf"
+                        accept=".pdf,.json"
                         onChange={handleFileSelect}
                         disabled={uploading}
                     />
                     <label htmlFor="file-input" className="file-input-label">
-                        {selectedFile ? selectedFile.name : 'Choose PDF file...'}
+                        {selectedFile ? selectedFile.name : 'Choose file (PDF or JSON)...'}
                     </label>
                 </div>
                 <button
@@ -120,6 +137,42 @@ const DocumentUpload = ({ clientId }) => {
                     {uploading ? 'Uploading...' : 'Upload'}
                 </button>
             </div>
+
+            {showChunks && chunkPreviews.length > 0 && (
+                <div className="chunks-preview-section">
+                    <div className="chunks-header">
+                        <h4>📝 Document Chunks Preview ({chunkPreviews.length})</h4>
+                        <button
+                            onClick={() => setShowChunks(false)}
+                            className="btn-close-chunks"
+                        >
+                            ✕ Close
+                        </button>
+                    </div>
+                    <div className="chunks-list">
+                        {chunkPreviews.map((chunk, index) => (
+                            <div key={index} className="chunk-item">
+                                <div className="chunk-header">
+                                    <span className="chunk-number">Chunk #{chunk.chunk_index + 1}</span>
+                                    <span className="chunk-size">{chunk.chunk_size} chars</span>
+                                </div>
+                                <div className="chunk-text">
+                                    {chunk.text_preview}
+                                </div>
+                                {chunk.metadata && Object.keys(chunk.metadata).length > 0 && (
+                                    <div className="chunk-metadata">
+                                        {Object.entries(chunk.metadata).map(([key, value]) => (
+                                            <span key={key} className="metadata-tag">
+                                                {key}: {typeof value === 'object' ? JSON.stringify(value) : value}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="documents-section">
                 <div className="documents-header">
@@ -140,7 +193,7 @@ const DocumentUpload = ({ clientId }) => {
                 ) : documents.length === 0 ? (
                     <div className="empty-state">
                         <p>No documents uploaded yet</p>
-                        <small>Upload PDF files to enable Q&A</small>
+                        <small>Upload PDF or JSON files to enable Q&A</small>
                     </div>
                 ) : (
                     <div className="documents-list">

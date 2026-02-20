@@ -421,6 +421,126 @@ Now rewrite this query:"""
             logger.error(f"Query rewriting failed: {e}")
             return query
     
+    def normalize_and_enhance_query(
+        self,
+        query: str,
+        llm_service: Any,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        domain_context: Optional[str] = None
+    ) -> str:
+        """
+        Smart Query Normalization & Enhancement - Lightweight alternative to multi-query.
+        
+        Cost-efficient preprocessing that handles:
+        1. Text normalization (lowercase, clean punctuation)
+        2. Abbreviation expansion (ol → Ordinary Level, al → Advanced Level)
+        3. Typo correction (experiance → experience)
+        4. Semantic expansion (add synonyms for better embedding match)
+        5. Domain-specific term conversion
+        
+        This is 6-10x cheaper than multi-query fusion while handling 80% of the same issues.
+        
+        Examples:
+        - "where did he did his ol" → 
+          "Where did the person complete Ordinary Level (O/L) education?"
+        
+        - "what r his qualifications" → 
+          "What are the person's educational qualifications and certifications?"
+        
+        - "tell me bout work experiance" → 
+          "Tell me about the person's work experience and employment history"
+        
+        Args:
+            query: Raw user query
+            llm_service: LLM service for normalization
+            conversation_history: Optional conversation context for pronoun resolution
+            domain_context: Optional domain info (e.g., "Sri Lankan education system CV")
+            
+        Returns:
+            Normalized and enhanced query
+        """
+        # Build context from conversation history
+        context = ""
+        if conversation_history:
+            recent = conversation_history[-2:] if len(conversation_history) >= 2 else conversation_history
+            context = "\n\nRecent conversation:\n" + "\n".join([
+                f"{msg.get('role', 'user')}: {msg.get('content', '')[:100]}" 
+                for msg in recent
+            ])
+        
+        domain_info = f"\n\nDomain context: {domain_context}" if domain_context else ""
+        
+        system_prompt = f"""You are a query normalization expert. Transform raw user queries into clear, comprehensive search queries optimized for semantic retrieval.
+
+🎯 Your Tasks:
+1. **Fix typos and grammar** - Correct spelling and grammatical errors
+2. **Expand abbreviations** - Convert short forms to full terms
+   • ol, O/L, o-level → "Ordinary Level (O/L)"  
+   • al, A/L, a-level → "Advanced Level (A/L)"
+   • cv → "curriculum vitae resume"
+   • uni → "university"
+3. **Resolve pronouns** - Replace "he/she/his/her" with "the person" or specific context
+4. **Add semantic richness** - Include synonyms and related terms
+5. **Preserve specifics** - Keep numbers, dates, names, locations
+6. **Keep natural** - Should read like a proper question, not keyword soup
+
+🌍 Domain-Specific Rules:{domain_info}
+• Recognize education terms: GCE, qualification levels, examination boards
+• Recognize CV sections: education, work experience, skills, volunteering
+• Keep cultural context (e.g., Sri Lankan exam system)
+
+✅ Good Examples:
+
+Input: "where did he did his ol"
+Output: "Where did the person complete their Ordinary Level (O/L) education?"
+
+Input: "what r his qualifications"  
+Output: "What are the person's educational qualifications and certifications?"
+
+Input: "tell me bout work experiance"
+Output: "Tell me about the person's work experience and employment history"
+
+Input: "his al results plz"
+Output: "What are the person's Advanced Level (A/L) examination results?"
+
+❌ Avoid:
+• Keyword lists: "person education O/L results qualification" 
+• Over-expansion: Adding unnecessary details
+• Removing important context
+• Changing the core question meaning
+
+Return ONLY the normalized query, nothing else.{context}"""
+
+        prompt = f"Raw query: {query}\n\nNormalized query:"
+        
+        try:
+            # Generate normalized query
+            normalized = llm_service.generate_response(
+                query=prompt,
+                system_prompt=system_prompt
+            )
+            
+            # Clean up response
+            normalized = normalized.strip().strip('"').strip("'").strip()
+            
+            # Safety check: if normalization fails or is too different, use original
+            if not normalized or len(normalized) > len(query) * 4:
+                logger.warning(f"Query normalization suspicious, using original. "
+                              f"Original: '{query}', Normalized: '{normalized}'")
+                return query
+            
+            # Additional safety: ensure it's still a question-like format
+            if len(normalized) < 5:
+                logger.warning(f"Normalized query too short: '{normalized}', using original")
+                return query
+            
+            logger.info(f"Query normalized: '{query}' → '{normalized}'")
+            return normalized
+            
+        except Exception as e:
+            logger.error(f"Query normalization failed: {e}")
+            return query
+    
     def hyde_query(
         self,
         query: str,
@@ -473,6 +593,311 @@ The goal is to create an "ideal document" that real documentation should resembl
             logger.error(f"HyDE generation failed: {e}")
             # Fallback: use original query
             return query
+    
+    def generate_query_variations(
+        self,
+        query: str,
+        llm_service: Any,
+        num_variations: int = 3,
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> List[str]:
+        """
+        Generate multiple query variations for RAG Fusion.
+        
+        Strategy:
+        1. Use LLM to generate diverse reformulations of the query
+        2. Cover different phrasings, abbreviations, synonyms
+        3. Each variation searches from a different angle
+        4. Results are fused using Reciprocal Rank Fusion (RRF)
+        
+        This makes retrieval robust to:
+        - Typos and grammatical errors
+        - Domain-specific abbreviations (e.g., "ol" vs "O/L")
+        - Different terminology across clients
+        - Ambiguous or vague questions
+        
+        Args:
+            query: Original user query
+            llm_service: LLM service for generation
+            num_variations: Number of variations to generate (default: 3)
+            conversation_history: Optional conversation context
+            
+        Returns:
+            List of query variations (includes original query)
+        """
+        system_prompt = f"""Generate {num_variations} different ways to ask the following query. Each variation should:
+
+1. Rephrase using different words/synonyms
+2. Expand abbreviations (e.g., "ol" → "Ordinary Level O/L", "al" → "Advanced Level A/L")
+3. Fix any typos or grammatical errors
+4. Cover different aspects of the question
+5. Be clear and specific
+
+Return ONLY the {num_variations} reformulated queries, one per line, numbered.
+Do NOT include explanations or extra text."""
+
+        context = ""
+        if conversation_history:
+            recent = conversation_history[-2:] if len(conversation_history) >= 2 else conversation_history
+            context = "\n\nRecent conversation context:\n" + "\n".join([
+                f"{msg.get('role', 'user')}: {msg.get('content', '')}" 
+                for msg in recent
+            ])
+        
+        prompt = f"Original query: {query}{context}\n\nGenerate {num_variations} variations:"
+        
+        try:
+            # Generate variations
+            response = llm_service.generate_response(
+                query=prompt,
+                system_prompt=system_prompt
+            )
+            
+            # Parse variations (expecting numbered lines)
+            lines = [line.strip() for line in response.split('\n') if line.strip()]
+            variations = []
+            
+            for line in lines:
+                # Remove numbering (e.g., "1.", "1)", "1 -", etc.)
+                clean_line = re.sub(r'^\d+[\.\)\-\:]\s*', '', line).strip()
+                # Remove quotes if present
+                clean_line = clean_line.strip('"').strip("'").strip()
+                
+                if clean_line and len(clean_line) > 5:  # Sanity check
+                    variations.append(clean_line)
+            
+            # Deduplicate and limit
+            unique_variations = []
+            seen = set()
+            for var in variations:
+                var_lower = var.lower()
+                if var_lower not in seen:
+                    unique_variations.append(var)
+                    seen.add(var_lower)
+            
+            # Ensure we have at least original query
+            if query.lower() not in seen:
+                unique_variations.insert(0, query)
+            
+            # Limit to requested number + original
+            final_variations = unique_variations[:num_variations + 1]
+            
+            logger.info(f"Generated {len(final_variations)} query variations for: '{query[:50]}...'")
+            for i, var in enumerate(final_variations):
+                logger.debug(f"  Variation {i}: {var}")
+            
+            return final_variations
+            
+        except Exception as e:
+            logger.error(f"Query variation generation failed: {e}")
+            # Fallback: return original query only
+            return [query]
+    
+    def multi_query_retrieval(
+        self,
+        query: str,
+        vector_store: Any,
+        embeddings_service: Any,
+        llm_service: Any,
+        collection_name: str,
+        num_variations: int = 3,
+        top_k_per_query: int = 10,
+        final_top_k: int = 6,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        boost_original: float = 1.5
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Multi-Query RAG Fusion: Retrieve using multiple query variations and fuse results.
+        
+        Pipeline:
+        1. Generate N query variations
+        2. Retrieve top-k documents for each variation
+        3. Fuse results using Reciprocal Rank Fusion (RRF)
+        4. Return top-ranked unique documents
+        
+        Args:
+            query: Original user query
+            vector_store: Vector store instance
+            embeddings_service: Embeddings service
+            llm_service: LLM service for generating variations
+            collection_name: Collection to search
+            num_variations: Number of query variations (default: 3)
+            top_k_per_query: Documents per variation (default: 10)
+            final_top_k: Final number of results (default: 6)
+            conversation_history: Optional conversation context
+            metadata_filter: Optional metadata filtering
+            boost_original: Weight boost for original query (default: 1.5x)
+            
+        Returns:
+            Tuple of (fused results, metadata)
+        """
+        metadata = {
+            'original_query': query,
+            'num_variations': 0,
+            'variations': [],
+            'retrievals': [],
+            'fusion_method': 'reciprocal_rank_fusion'
+        }
+        
+        try:
+            # Step 1: Generate query variations
+            variations = self.generate_query_variations(
+                query=query,
+                llm_service=llm_service,
+                num_variations=num_variations,
+                conversation_history=conversation_history
+            )
+            
+            metadata['num_variations'] = len(variations)
+            metadata['variations'] = variations
+            
+            # Step 2: Retrieve for each variation
+            all_results = []
+            
+            for i, var_query in enumerate(variations):
+                try:
+                    # Generate embedding
+                    query_embedding = embeddings_service.embed_text(var_query)
+                    
+                    # Vector search
+                    results = vector_store.query(
+                        collection_name=collection_name,
+                        query_embedding=query_embedding,
+                        top_k=top_k_per_query,
+                        metadata_filter=metadata_filter
+                    )
+                    
+                    # Track which variation this came from
+                    is_original = (i == 0 and var_query.lower() == query.lower())
+                    weight = boost_original if is_original else 1.0
+                    
+                    all_results.append({
+                        'variation': var_query,
+                        'is_original': is_original,
+                        'weight': weight,
+                        'results': results,
+                        'count': len(results)
+                    })
+                    
+                    metadata['retrievals'].append({
+                        'variation': var_query,
+                        'num_results': len(results),
+                        'is_original': is_original
+                    })
+                    
+                    logger.debug(f"Retrieved {len(results)} docs for variation {i}: '{var_query[:50]}...'")
+                    
+                except Exception as e:
+                    logger.error(f"Retrieval failed for variation '{var_query}': {e}")
+                    continue
+            
+            if not all_results:
+                logger.error("No successful retrievals for any variation")
+                return [], metadata
+            
+            # Step 3: Fuse results using RRF
+            fused_results = self._fuse_multi_query_results(
+                all_results=all_results,
+                top_k=final_top_k
+            )
+            
+            metadata['num_fused_results'] = len(fused_results)
+            metadata['num_unique_docs'] = len(set(r.get('id') for r in fused_results if r.get('id')))
+            
+            logger.info(f"Multi-query fusion: {len(variations)} variations → {len(fused_results)} results")
+            
+            return fused_results, metadata
+            
+        except Exception as e:
+            logger.error(f"Multi-query retrieval failed: {e}")
+            return [], metadata
+    
+    def _fuse_multi_query_results(
+        self,
+        all_results: List[Dict[str, Any]],
+        top_k: int = 6,
+        rrf_k: int = 60
+    ) -> List[Dict[str, Any]]:
+        """
+        Fuse multiple retrieval results using Reciprocal Rank Fusion (RRF).
+        
+        RRF Formula: score(doc) = Σ weight_i / (k + rank_i)
+        where k=60 is a constant that reduces impact of high ranks
+        
+        Args:
+            all_results: List of retrieval results from different queries
+            top_k: Number of top results to return
+            rrf_k: RRF constant (default: 60, standard value)
+            
+        Returns:
+            Fused and ranked results
+        """
+        # Document ID → {doc data, scores, ranks}
+        doc_map = {}
+        
+        # Process each query's results
+        for query_result in all_results:
+            results = query_result.get('results', [])
+            weight = query_result.get('weight', 1.0)
+            
+            for rank, doc in enumerate(results):
+                doc_id = doc.get('id') or doc.get('metadata', {}).get('id', f"doc_{rank}")
+                
+                # Initialize document if new
+                if doc_id not in doc_map:
+                    doc_map[doc_id] = {
+                        'doc': doc,
+                        'rrf_score': 0.0,
+                        'appearances': 0,
+                        'ranks': [],
+                        'original_scores': []
+                    }
+                
+                # RRF score: weight / (k + rank)
+                # rank is 0-indexed, so rank 0 = top result
+                rrf_contribution = weight / (rrf_k + rank)
+                
+                doc_map[doc_id]['rrf_score'] += rrf_contribution
+                doc_map[doc_id]['appearances'] += 1
+                doc_map[doc_id]['ranks'].append(rank)
+                
+                # Store original score if available
+                if 'score' in doc or 'distance' in doc:
+                    original_score = doc.get('score', 1.0 - doc.get('distance', 0.5))
+                    doc_map[doc_id]['original_scores'].append(original_score)
+        
+        # Convert to list and add fusion metadata
+        fused_docs = []
+        for doc_id, doc_data in doc_map.items():
+            doc = doc_data['doc'].copy()
+            
+            # Add fusion score
+            doc['fusion_score'] = doc_data['rrf_score']
+            doc['score'] = doc_data['rrf_score']  # Use fusion score as primary score
+            
+            # Add metadata about fusion
+            if 'metadata' not in doc:
+                doc['metadata'] = {}
+            
+            doc['metadata']['fusion_appearances'] = doc_data['appearances']
+            doc['metadata']['fusion_avg_rank'] = sum(doc_data['ranks']) / len(doc_data['ranks'])
+            doc['metadata']['fusion_best_rank'] = min(doc_data['ranks'])
+            
+            fused_docs.append(doc)
+        
+        # Sort by fusion score (higher is better)
+        fused_docs.sort(key=lambda x: x.get('fusion_score', 0), reverse=True)
+        
+        # Return top-k
+        top_results = fused_docs[:top_k]
+        
+        logger.debug(f"Fused {len(doc_map)} unique documents, returning top {len(top_results)}")
+        for i, doc in enumerate(top_results[:3]):  # Log top 3
+            logger.debug(f"  Rank {i+1}: score={doc.get('fusion_score', 0):.4f}, "
+                        f"appearances={doc.get('metadata', {}).get('fusion_appearances', 0)}")
+        
+        return top_results
     
     def optimize_retrieval(
         self,

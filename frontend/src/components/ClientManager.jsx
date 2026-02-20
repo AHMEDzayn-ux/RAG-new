@@ -7,22 +7,53 @@ const ClientManager = ({ onClientSelect, selectedClient }) => {
     const [newClientId, setNewClientId] = useState('');
     const [newClientDesc, setNewClientDesc] = useState('');
     const [loading, setLoading] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
     const [error, setError] = useState('');
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [totalClients, setTotalClients] = useState(0);
+    const PAGE_SIZE = 20;
 
     useEffect(() => {
-        loadClients();
+        loadClients(true); // Load initial batch on mount
     }, []);
 
-    const loadClients = async () => {
+    const loadClients = async (reset = false) => {
         try {
-            setLoading(true);
-            const data = await listClients();
-            setClients(data.clients || []);
+            if (reset && page === 0) {
+                setInitialLoading(true);
+            } else {
+                setLoading(true);
+            }
+            const currentPage = reset ? 0 : page;
+            const skip = currentPage * PAGE_SIZE;
+
+            const data = await listClients(skip, PAGE_SIZE);
+
+            if (reset) {
+                // Reset: replace all clients
+                setClients(data.clients || []);
+                setPage(1);
+            } else {
+                // Append: add more clients
+                setClients(prev => [...prev, ...(data.clients || [])]);
+                setPage(prev => prev + 1);
+            }
+
+            setTotalClients(data.total || 0);
+            setHasMore((skip + PAGE_SIZE) < (data.total || 0));
             setError('');
         } catch (err) {
             setError('Failed to load clients: ' + err.message);
         } finally {
             setLoading(false);
+            setInitialLoading(false);
+        }
+    };
+
+    const loadMoreClients = () => {
+        if (!loading && hasMore) {
+            loadClients(false);
         }
     };
 
@@ -38,7 +69,7 @@ const ClientManager = ({ onClientSelect, selectedClient }) => {
             await createClient(newClientId, newClientDesc);
             setNewClientId('');
             setNewClientDesc('');
-            await loadClients();
+            await loadClients(true); // Reset pagination
             setError('');
         } catch (err) {
             setError('Failed to create client: ' + err.message);
@@ -56,7 +87,7 @@ const ClientManager = ({ onClientSelect, selectedClient }) => {
             if (selectedClient === clientId) {
                 onClientSelect(null);
             }
-            await loadClients();
+            await loadClients(true); // Reset pagination
             setError('');
         } catch (err) {
             setError('Failed to delete client: ' + err.message);
@@ -92,40 +123,63 @@ const ClientManager = ({ onClientSelect, selectedClient }) => {
             </form>
 
             <div className="clients-list">
-                <h3>Existing Clients ({clients.length})</h3>
-                {clients.length === 0 ? (
+                <h3>Existing Clients ({clients.length}{totalClients > clients.length ? ` of ${totalClients}` : ''})</h3>
+
+                {initialLoading ? (
+                    <div className="loading-skeleton">
+                        <p>Loading clients...</p>
+                        <div className="skeleton-cards">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="skeleton-card"></div>
+                            ))}
+                        </div>
+                    </div>
+                ) : totalClients === 0 ? (
                     <p className="empty-state">No clients yet. Create one to get started!</p>
                 ) : (
-                    <div className="clients-grid">
-                        {clients.map((client) => (
-                            <div
-                                key={client.client_id}
-                                className={`client-card ${selectedClient === client.client_id ? 'selected' : ''}`}
-                            >
-                                <div className="client-info">
-                                    <h4>{client.client_id}</h4>
-                                    {client.description && <p>{client.description}</p>}
-                                    <small>{client.document_count || 0} documents</small>
+                    <>
+                        <div className="clients-grid">
+                            {clients.map((client) => (
+                                <div
+                                    key={client.client_id}
+                                    className={`client-card ${selectedClient === client.client_id ? 'selected' : ''}`}
+                                >
+                                    <div className="client-info">
+                                        <h4>{client.client_id}</h4>
+                                        {client.description && <p>{client.description}</p>}
+                                        <small>{client.document_count || 0} documents</small>
+                                    </div>
+                                    <div className="client-actions">
+                                        <button
+                                            onClick={() => onClientSelect(client.client_id)}
+                                            className="btn-select"
+                                            disabled={selectedClient === client.client_id}
+                                        >
+                                            {selectedClient === client.client_id ? 'Selected' : 'Select'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteClient(client.client_id)}
+                                            className="btn-delete"
+                                            disabled={loading}
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="client-actions">
-                                    <button
-                                        onClick={() => onClientSelect(client.client_id)}
-                                        className="btn-select"
-                                        disabled={selectedClient === client.client_id}
-                                    >
-                                        {selectedClient === client.client_id ? 'Selected' : 'Select'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteClient(client.client_id)}
-                                        className="btn-delete"
-                                        disabled={loading}
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
+                            ))}
+                        </div>
+                        {hasMore && (
+                            <div className="load-more-container">
+                                <button
+                                    className="btn-load-more"
+                                    onClick={loadMoreClients}
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Loading...' : `Load More (${totalClients - clients.length} remaining)`}
+                                </button>
                             </div>
-                        ))}
-                    </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>

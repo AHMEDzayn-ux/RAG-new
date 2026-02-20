@@ -28,8 +28,10 @@ export const createClient = async (clientId, description = "") => {
   return response.data;
 };
 
-export const listClients = async () => {
-  const response = await api.get("/api/clients");
+export const listClients = async (skip = 0, limit = 100) => {
+  const response = await api.get("/api/clients", {
+    params: { skip, limit },
+  });
   return response.data;
 };
 

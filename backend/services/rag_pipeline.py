@@ -96,7 +96,8 @@ class RAGPipeline:
     
     def index_documents(
         self,
-        pdf_paths: List[str],
+        pdf_paths: List[str] = None,
+        file_paths: List[str] = None,
         chunk_size: Optional[int] = None,
         chunk_overlap: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -106,24 +107,32 @@ class RAGPipeline:
         """
         Index documents into the vector store with advanced strategies.
         
+        Supports:
+        - PDF files (.pdf) - Text extraction and chunking
+        - JSON files (.json) - Customer care FAQs, packages, catalogs
+        
         Complete workflow:
-        1. Load PDFs and chunk text (with optional parent-child strategy)
+        1. Load documents and chunk text (auto-detects PDF vs JSON)
         2. Generate QA pairs if enabled (for better search alignment)
         3. Generate embeddings for chunks/questions
         4. Store in vector database with rich metadata
         
         Args:
-            pdf_paths: List of PDF file paths to index
+            pdf_paths: Legacy parameter - List of PDF file paths (deprecated, use file_paths)
+            file_paths: List of file paths to index (PDF or JSON)
             chunk_size: Custom chunk size (optional)
             chunk_overlap: Custom chunk overlap (optional)
             metadata: Additional metadata to attach to all documents
-            use_parent_child: Use parent-child chunking strategy
+            use_parent_child: Use parent-child chunking strategy (PDF only)
             generate_qa_pairs: Generate hypothetical QA pairs for better search
         
         Returns:
             Dictionary with indexing statistics
         """
-        logger.info(f"Starting document indexing for {len(pdf_paths)} PDFs")
+        # Backward compatibility: support both pdf_paths and file_paths
+        paths_to_process = file_paths if file_paths is not None else (pdf_paths or [])
+        
+        logger.info(f"Starting document indexing for {len(paths_to_process)} files")
         logger.info(f"Parent-child: {use_parent_child}, QA generation: {generate_qa_pairs}")
         
         all_chunks = []
@@ -132,41 +141,53 @@ class RAGPipeline:
         parent_lookup = {}  # Maps child_id to parent_text
         
         # Step 1: Load and chunk all documents
-        for pdf_path in pdf_paths:
+        for file_path in paths_to_process:
             try:
-                logger.info(f"Processing: {pdf_path}")
+                logger.info(f"Processing: {file_path}")
                 
-                # Load PDF content
-                text = self.doc_loader.load_pdf(pdf_path)
+                # Detect file type
+                file_ext = Path(file_path).suffix.lower()
                 
-                if use_parent_child:
-                    # Use parent-child strategy
-                    result = self.doc_loader.chunk_with_parent_child(text, metadata)
-                    chunks = result['child_chunks']  # Index children for search
+                if file_ext == '.json':
+                    # JSON files: Direct chunking (no parent-child or QA generation yet)
+                    chunks = self.doc_loader.load_and_chunk_json(file_path, metadata=metadata)
+                    logger.info(f"Loaded JSON: {len(chunks)} chunks created")
                     
-                    # Store parent lookup for retrieval
-                    for parent in result['parent_chunks']:
-                        parent_id = parent['metadata']['parent_id']
-                        parent_lookup[parent_id] = parent['text']
+                elif file_ext == '.pdf':
+                    # Load PDF content
+                    text = self.doc_loader.load_pdf(file_path)
                     
-                    logger.info(f"Created {len(result['parent_chunks'])} parents, {len(chunks)} children")
-                    
-                elif generate_qa_pairs:
-                    # Generate QA pairs for better search
-                    chunks = self.doc_loader.chunk_with_qa_generation(
-                        text, 
-                        metadata,
-                        llm_service=self.llm_service,
-                        generate_qa=True
-                    )
-                    logger.info(f"Generated QA pairs for {len(chunks)} chunks")
+                    if use_parent_child:
+                        # Use parent-child strategy
+                        result = self.doc_loader.chunk_with_parent_child(text, metadata)
+                        chunks = result['child_chunks']  # Index children for search
+                        
+                        # Store parent lookup for retrieval
+                        for parent in result['parent_chunks']:
+                            parent_id = parent['metadata']['parent_id']
+                            parent_lookup[parent_id] = parent['text']
+                        
+                        logger.info(f"Created {len(result['parent_chunks'])} parents, {len(chunks)} children")
+                        
+                    elif generate_qa_pairs:
+                        # Generate QA pairs for better search
+                        chunks = self.doc_loader.chunk_with_qa_generation(
+                            text, 
+                            metadata,
+                            llm_service=self.llm_service,
+                            generate_qa=True
+                        )
+                        logger.info(f"Generated QA pairs for {len(chunks)} chunks")
+                    else:
+                        # Standard chunking
+                        if chunk_size and chunk_overlap:
+                            self.doc_loader.chunk_size = chunk_size
+                            self.doc_loader.chunk_overlap = chunk_overlap
+                        
+                        chunks = self.doc_loader.chunk_text(text, metadata)
+                
                 else:
-                    # Standard chunking
-                    if chunk_size and chunk_overlap:
-                        self.doc_loader.chunk_size = chunk_size
-                        self.doc_loader.chunk_overlap = chunk_overlap
-                    
-                    chunks = self.doc_loader.chunk_text(text, metadata)
+                    raise ValueError(f"Unsupported file type: {file_ext}. Supported: .pdf, .json")
                 
                 # Prepare data
                 for i, chunk in enumerate(chunks):
@@ -177,8 +198,9 @@ class RAGPipeline:
                     if metadata:
                         chunk_metadata.update(metadata)
                     
-                    # Add document source
-                    chunk_metadata['source'] = pdf_path
+                    # Add document source (usually already set by loader, but ensure it's there)
+                    if 'source' not in chunk_metadata:
+                        chunk_metadata['source'] = file_path
                     chunk_metadata['chunk_index'] = i
                     
                     # Store parent lookup if using parent-child
@@ -201,10 +223,10 @@ class RAGPipeline:
                             all_metadatas.append(qa_metadata)
                             logger.debug(f"Added question: {question[:50]}...")
                 
-                logger.info(f"Processed {len(chunks)} chunks from {pdf_path}")
+                logger.info(f"Processed {len(chunks)} chunks from {file_path}")
                 
             except Exception as e:
-                logger.error(f"Error processing {pdf_path}: {str(e)}")
+                logger.error(f"Error processing {file_path}: {str(e)}")
                 raise
         
         # Step 2: Generate embeddings
@@ -242,13 +264,28 @@ class RAGPipeline:
         self.vector_store.persist()
         logger.info("Vector store persisted to disk")
         
+        # Create chunk previews for response
+        chunk_previews = []
+        for i, chunk in enumerate(all_chunks[:50]):  # Limit to first 50 chunks for response size
+            text = chunk['text']
+            preview = {
+                'chunk_index': i,
+                'text_preview': text,  # Full text, not truncated
+                'chunk_size': len(text),
+                'metadata': chunk.get('metadata', {})
+            }
+            chunk_previews.append(preview)
+        
+        logger.info(f"Created {len(chunk_previews)} chunk previews")
+        
         # Return statistics
         stats = {
-            'pdfs_processed': len(pdf_paths),
+            'pdfs_processed': len(paths_to_process),  # Fixed: use paths_to_process instead of pdf_paths
             'total_chunks': len(all_chunks),
             'total_embeddings': len(embeddings),
             'collection_name': self.collection_name,
-            'vector_store_count': self.vector_store.get_collection_count(self.collection_name)
+            'vector_store_count': self.vector_store.get_collection_count(self.collection_name),
+            'chunk_previews': chunk_previews
         }
         
         logger.info(f"Indexing complete: {stats}")
@@ -262,21 +299,25 @@ class RAGPipeline:
         metadata_filter: Optional[Dict[str, Any]] = None,
         use_hybrid_search: bool = True,
         use_reranking: bool = True,
+        use_query_normalization: bool = True,
         use_query_rewriting: bool = False,
-        use_hyde: bool = False
+        use_hyde: bool = False,
+        use_multi_query: bool = False,
+        num_query_variations: int = 3
     ) -> Dict[str, Any]:
         """
         Query the RAG system with advanced retrieval strategies.
         
         Complete workflow:
-        1. Optional: Query transformation (rewriting or HyDE)
-        2. Generate embedding for question
-        3. Retrieve relevant documents from vector store (with metadata filtering)
-        4. Optional: Hybrid search (vector + BM25)
-        5. Optional: Re-ranking with cross-encoder
-        6. Filter by section if query intent detected
-        7. Retrieve parent chunks if using parent-child strategy
-        8. Generate response using LLM with context
+        1. Optional: Query normalization (default - fixes typos, expands abbreviations)
+        2. Optional: Multi-query retrieval (OR query transformation with rewriting/HyDE)
+        3. Generate embedding for question
+        4. Retrieve relevant documents from vector store (with metadata filtering)
+        5. Optional: Hybrid search (vector + BM25)
+        6. Optional: Re-ranking with cross-encoder
+        7. Filter by section if query intent detected
+        8. Retrieve parent chunks if using parent-child strategy
+        9. Generate response using LLM with context
         
         Args:
             question: User's question
@@ -285,107 +326,138 @@ class RAGPipeline:
             metadata_filter: Optional metadata filter (e.g., {"user_tier": "enterprise"})
             use_hybrid_search: Enable hybrid vector+keyword search
             use_reranking: Enable cross-encoder re-ranking
+            use_query_normalization: Enable smart query normalization (default: True)
             use_query_rewriting: Enable query rewriting
             use_hyde: Enable HyDE (hypothetical document embeddings)
+            use_multi_query: Enable multi-query RAG fusion (more expensive)
+            num_query_variations: Number of query variations for multi-query (default: 3)
         
         Returns:
             Dictionary with answer and optional sources
         """
         logger.info(f"Processing query: {question}")
-        logger.info(f"Advanced features: hybrid={use_hybrid_search}, rerank={use_reranking}, "
-                   f"rewrite={use_query_rewriting}, hyde={use_hyde}")
+        logger.info(f"Advanced features: normalize={use_query_normalization}, hybrid={use_hybrid_search}, "
+                   f"rerank={use_reranking}, rewrite={use_query_rewriting}, hyde={use_hyde}, multi_query={use_multi_query}")
         
-        # Detect query intent for section filtering (disabled - too restrictive for CV use cases)
-        # target_section = self._detect_query_section(question)
-        
-        # Build metadata filter (without automatic section filtering)
+        # Build metadata filter
         combined_filter = metadata_filter.copy() if metadata_filter else {}
-        # Disabled automatic section filtering - it was too restrictive
-        # if target_section:
-        #     combined_filter['section'] = target_section
-        #     logger.info(f"Detected query intent: {target_section}")
-        
-        # Step 1: Optional query transformation
-        search_query = question
+        top_k = top_k or settings.retrieval_top_k
         optimization_metadata = {'transformations': []}
         
-        if self.retrieval_optimizer and (use_query_rewriting or use_hyde):
-            if use_hyde:
-                # HyDE: Generate hypothetical answer
-                search_query = self.retrieval_optimizer.hyde_query(
-                    question,
-                    self.llm_service,
-                    self.system_role
-                )
-                optimization_metadata['transformations'].append('hyde')
-                logger.info("Applied HyDE transformation")
-            elif use_query_rewriting:
-                # Query rewriting
-                search_query = self.retrieval_optimizer.rewrite_query(
-                    question,
-                    self.llm_service
-                )
-                optimization_metadata['transformations'].append('query_rewriting')
-                logger.info(f"Rewrote query: '{question}' → '{search_query}'")
-        
-        # Step 2: Generate query embedding (use transformed query)
-        query_embedding = self.embeddings_service.embed_text(search_query)
-        logger.info("Generated query embedding")
-        
-        # Step 3: Retrieve relevant documents with metadata filter
-        top_k = top_k or settings.retrieval_top_k
-        
-        # Retrieve more candidates if using advanced retrieval
-        initial_k = top_k * 10 if (self.retrieval_optimizer and (use_hybrid_search or use_reranking)) else top_k
-        
-        try:
-            results = self.vector_store.query(
-                collection_name=self.collection_name,
-                query_embeddings=[query_embedding],
-                n_results=initial_k,
-                metadata_filter=combined_filter if combined_filter else None
+        # Step 0: Query normalization (lightweight preprocessing - default enabled)
+        normalized_query = question
+        if self.retrieval_optimizer and use_query_normalization:
+            normalized_query = self.retrieval_optimizer.normalize_and_enhance_query(
+                query=question,
+                llm_service=self.llm_service,
+                conversation_history=None,
+                domain_context="CV and education documents"
             )
-        except Exception as e:
-            logger.error(f"Error querying vector store: {str(e)}")
-            raise
+            if normalized_query != question:
+                optimization_metadata['transformations'].append('normalization')
+                optimization_metadata['normalized_query'] = normalized_query
+                logger.info(f"Normalized query: '{question}' → '{normalized_query}'")
         
-        # Extract retrieved documents
-        retrieved_docs = []
-        if results['documents'] and len(results['documents']) > 0:
-            for i, doc in enumerate(results['documents'][0]):
-                doc_metadata = results['metadatas'][0][i]
-                
-                # Skip questions, retrieve original content
-                if doc_metadata.get('content_type') == 'question':
-                    continue
-                
-                retrieved_docs.append({
-                    'text': doc,
-                    'metadata': doc_metadata,
-                    'distance': results['distances'][0][i],
-                    'doc_id': i  # Track original position
-                })
+        # Step 1: Multi-query retrieval (if enabled, uses normalized query)
+        if self.retrieval_optimizer and use_multi_query:
+            logger.info("Using multi-query RAG fusion")
+            retrieved_docs, opt_meta = self.retrieval_optimizer.multi_query_retrieval(
+                query=normalized_query,
+                vector_store=self.vector_store,
+                embeddings_service=self.embeddings_service,
+                llm_service=self.llm_service,
+                collection_name=self.collection_name,
+                num_variations=num_query_variations,
+                top_k_per_query=10,
+                final_top_k=top_k,
+                conversation_history=None,
+                metadata_filter=combined_filter if combined_filter else None,
+                boost_original=1.5
+            )
+            optimization_metadata.update(opt_meta)
+            optimization_metadata['transformations'].append('multi_query_fusion')
+            logger.info(f"Multi-query fusion complete: {len(retrieved_docs)} results")
         
-        logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
-        
-        # Step 4: Apply advanced retrieval optimization
-        if self.retrieval_optimizer and retrieved_docs:
-            if use_hybrid_search or use_reranking:
-                optimized_docs, opt_meta = self.retrieval_optimizer.optimize_retrieval(
+        else:
+            # Standard retrieval path
+            # Step 1a: Optional query transformation (uses normalized query as base)
+            search_query = normalized_query
+            
+            if self.retrieval_optimizer and (use_query_rewriting or use_hyde):
+                if use_hyde:
+                    # HyDE: Generate hypothetical answer
+                    search_query = self.retrieval_optimizer.hyde_query(
+                        normalized_query,
+                        self.llm_service,
+                        self.system_role
+                    )
+                    optimization_metadata['transformations'].append('hyde')
+                    logger.info("Applied HyDE transformation")
+                elif use_query_rewriting:
+                    # Query rewriting (on top of normalization)
+                    search_query = self.retrieval_optimizer.rewrite_query(
+                        normalized_query,
+                        self.llm_service
+                    )
+                    optimization_metadata['transformations'].append('query_rewriting')
+                    logger.info(f"Rewrote query: '{normalized_query}' → '{search_query}'")
+            
+            # Step 2: Generate query embedding (use transformed query)
+            query_embedding = self.embeddings_service.embed_text(search_query)
+            logger.info("Generated query embedding")
+            
+            # Step 3: Retrieve relevant documents with metadata filter
+            # Retrieve more candidates if using advanced retrieval
+            initial_k = top_k * 10 if (self.retrieval_optimizer and (use_hybrid_search or use_reranking)) else top_k
+            
+            try:
+                results = self.vector_store.query(
                     collection_name=self.collection_name,
-                    query=question,  # Use ORIGINAL query for reranking
-                    vector_results=retrieved_docs,
-                    llm_service=self.llm_service,
-                    use_hybrid=use_hybrid_search,
-                    use_reranking=use_reranking,
-                    use_query_rewriting=False,  # Already done above
-                    use_hyde=False,  # Already done above
-                    top_k_initial=50,
-                    top_k_final=top_k
+                    query_embeddings=[query_embedding],
+                    n_results=initial_k,
+                    metadata_filter=combined_filter if combined_filter else None
                 )
-                retrieved_docs = optimized_docs
-                optimization_metadata.update(opt_meta)
-                logger.info(f"Applied optimization: {opt_meta['transformations']}")
+            except Exception as e:
+                logger.error(f"Error querying vector store: {str(e)}")
+                raise
+            
+            # Extract retrieved documents
+            retrieved_docs = []
+            if results['documents'] and len(results['documents']) > 0:
+                for i, doc in enumerate(results['documents'][0]):
+                    doc_metadata = results['metadatas'][0][i]
+                    
+                    # Skip questions, retrieve original content
+                    if doc_metadata.get('content_type') == 'question':
+                        continue
+                    
+                    retrieved_docs.append({
+                        'text': doc,
+                        'metadata': doc_metadata,
+                        'distance': results['distances'][0][i],
+                        'doc_id': i  # Track original position
+                    })
+            
+            logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
+            
+            # Step 4: Apply advanced retrieval optimization
+            if self.retrieval_optimizer and retrieved_docs:
+                if use_hybrid_search or use_reranking:
+                    optimized_docs, opt_meta = self.retrieval_optimizer.optimize_retrieval(
+                        collection_name=self.collection_name,
+                        query=question,  # Use ORIGINAL query for reranking
+                        vector_results=retrieved_docs,
+                        llm_service=self.llm_service,
+                        use_hybrid=use_hybrid_search,
+                        use_reranking=use_reranking,
+                        use_query_rewriting=False,  # Already done above
+                        use_hyde=False,  # Already done above
+                        top_k_initial=50,
+                        top_k_final=top_k
+                    )
+                    retrieved_docs = optimized_docs
+                    optimization_metadata.update(opt_meta)
+                    logger.info(f"Applied optimization: {opt_meta['transformations']}")
         
         # Step 5: Retrieve parent chunks if using parent-child strategy
         if retrieved_docs and any(doc['metadata'].get('has_parent') for doc in retrieved_docs):
@@ -730,8 +802,11 @@ class RAGPipeline:
         metadata_filter: Optional[Dict[str, Any]] = None,
         use_hybrid_search: bool = True,
         use_reranking: bool = True,
+        use_query_normalization: bool = True,
         use_query_rewriting: bool = False,
-        use_hyde: bool = False
+        use_hyde: bool = False,
+        use_multi_query: bool = False,
+        num_query_variations: int = 3
     ) -> Dict[str, Any]:
         """
         Conversational query with history and advanced retrieval.
@@ -744,25 +819,22 @@ class RAGPipeline:
             metadata_filter: Optional metadata filter for retrieval
             use_hybrid_search: Enable hybrid vector+keyword search
             use_reranking: Enable cross-encoder re-ranking
+            use_query_normalization: Enable smart query normalization (default: True)
             use_query_rewriting: Enable query rewriting
             use_hyde: Enable HyDE (hypothetical document embeddings)
+            use_multi_query: Enable multi-query RAG fusion (more expensive)
+            num_query_variations: Number of query variations for multi-query (default: 3)
         
         Returns:
             Dictionary with response and conversation info
         """
         logger.info(f"Processing chat message: {message}")
-        logger.info(f"Advanced features: hybrid={use_hybrid_search}, rerank={use_reranking}, "
-                   f"rewrite={use_query_rewriting}, hyde={use_hyde}")
+        logger.info(f"Advanced features: normalize={use_query_normalization}, hybrid={use_hybrid_search}, "
+                   f"rerank={use_reranking}, rewrite={use_query_rewriting}, hyde={use_hyde}, multi_query={use_multi_query}")
         
-        # Detect query intent for section filtering (disabled - too restrictive for CV use cases)
-        # target_section = self._detect_query_section(message)
-        
-        # Build combined metadata filter (without automatic section filtering)
+        # Build combined metadata filter
         combined_filter = metadata_filter.copy() if metadata_filter else {}
-        # Disabled automatic section filtering - it was too restrictive
-        # if target_section:
-        #     combined_filter['section'] = target_section
-        #     logger.info(f"Detected chat query intent: {target_section}")
+        top_k = top_k or settings.retrieval_top_k
         
         context = None
         retrieved_docs = None
@@ -771,90 +843,125 @@ class RAGPipeline:
         # Retrieve context if requested
         if use_retrieval:
             try:
-                # Step 0: Expand query if it contains pronouns by incorporating recent conversation history
-                search_query = self._expand_query_with_history(message, conversation_history)
-                if search_query != message:
-                    logger.info(f"Expanded query: '{message}' → '{search_query}'")
-                    optimization_metadata['transformations'].append('query_expansion')
+                # Step 0: Query normalization (with conversation history for pronoun resolution)
+                normalized_query = message
+                if self.retrieval_optimizer and use_query_normalization:
+                    normalized_query = self.retrieval_optimizer.normalize_and_enhance_query(
+                        query=message,
+                        llm_service=self.llm_service,
+                        conversation_history=conversation_history,
+                        domain_context="CV and education documents"
+                    )
+                    if normalized_query != message:
+                        optimization_metadata['transformations'].append('normalization')
+                        optimization_metadata['normalized_query'] = normalized_query
+                        logger.info(f"Normalized query: '{message}' → '{normalized_query}'")
                 
-                # Step 1: Optional query transformation
-                if self.retrieval_optimizer and (use_query_rewriting or use_hyde):
-                    if use_hyde:
-                        # HyDE: Generate hypothetical answer
-                        search_query = self.retrieval_optimizer.hyde_query(
-                            message,
-                            self.llm_service,
-                            self.system_role
-                        )
-                        optimization_metadata['transformations'].append('hyde')
-                        logger.info("Applied HyDE transformation")
-                    elif use_query_rewriting:
-                        # Query rewriting
-                        search_query = self.retrieval_optimizer.rewrite_query(
-                            message,
-                            self.llm_service
-                        )
-                        optimization_metadata['transformations'].append('query_rewriting')
-                        logger.info(f"Rewrote query: '{message}' → '{search_query}'")
+                # Step 1: Multi-query retrieval (if enabled, uses normalized query)
+                if self.retrieval_optimizer and use_multi_query:
+                    logger.info("Using multi-query RAG fusion for chat")
+                    retrieved_docs, opt_meta = self.retrieval_optimizer.multi_query_retrieval(
+                        query=normalized_query,
+                        vector_store=self.vector_store,
+                        embeddings_service=self.embeddings_service,
+                        llm_service=self.llm_service,
+                        collection_name=self.collection_name,
+                        num_variations=num_query_variations,
+                        top_k_per_query=10,
+                        final_top_k=top_k,
+                        conversation_history=conversation_history,
+                        metadata_filter=combined_filter if combined_filter else None,
+                        boost_original=1.5
+                    )
+                    optimization_metadata.update(opt_meta)
+                    optimization_metadata['transformations'].append('multi_query_fusion')
+                    logger.info(f"Multi-query fusion complete: {len(retrieved_docs)} results")
                 
-                # Step 2: Generate query embedding (use transformed query)
-                query_embedding = self.embeddings_service.embed_text(search_query)
-                top_k = top_k or settings.retrieval_top_k
-                
-                # Retrieve more candidates if using advanced retrieval
-                initial_k = top_k * 10 if (self.retrieval_optimizer and (use_hybrid_search or use_reranking)) else top_k
-                
-                results = self.vector_store.query(
-                    collection_name=self.collection_name,
-                    query_embeddings=[query_embedding],
-                    n_results=initial_k,
-                    metadata_filter=combined_filter if combined_filter else None
-                )
-                
-                # Extract context
-                if results and results.get('documents') and len(results['documents']) > 0 and results['documents'][0]:
-                    context = results['documents'][0]
-                    retrieved_docs = [
-                        {
-                            'text': doc,
-                            'metadata': results['metadatas'][0][i] if results.get('metadatas') else {},
-                            'distance': results['distances'][0][i] if results.get('distances') else 0,
-                            'doc_id': i
-                        }
-                        for i, doc in enumerate(context)
-                        if not results['metadatas'][0][i].get('content_type') == 'question'  # Skip questions
-                    ]
-                    
-                    logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
-                    
-                    # Step 3: Apply advanced retrieval optimization
-                    if self.retrieval_optimizer and retrieved_docs:
-                        if use_hybrid_search or use_reranking:
-                            optimized_docs, opt_meta = self.retrieval_optimizer.optimize_retrieval(
-                                collection_name=self.collection_name,
-                                query=message,  # Use ORIGINAL query for reranking
-                                vector_results=retrieved_docs,
-                                llm_service=self.llm_service,
-                                use_hybrid=use_hybrid_search,
-                                use_reranking=use_reranking,
-                                use_query_rewriting=False,  # Already done above
-                                use_hyde=False,  # Already done above
-                                top_k_initial=50,
-                                top_k_final=top_k
-                            )
-                            retrieved_docs = optimized_docs
-                            optimization_metadata.update(opt_meta)
-                            logger.info(f"Applied optimization: {opt_meta['transformations']}")
-                    
-                    # Step 4: Retrieve parent chunks if using parent-child
-                    if retrieved_docs and any(doc['metadata'].get('has_parent') for doc in retrieved_docs):
-                        retrieved_docs = self._retrieve_parent_chunks(retrieved_docs)
-                        logger.info(f"Retrieved parent chunks for full context")
-                    
-                    context = [doc['text'] for doc in retrieved_docs]
-                    logger.info(f"Final document count: {len(retrieved_docs)}")
                 else:
-                    logger.info("No documents found in collection for retrieval")
+                    # Standard retrieval path
+                    # Step 1a: Expand query if it contains pronouns (on top of normalization)
+                    search_query = self._expand_query_with_history(normalized_query, conversation_history)
+                    if search_query != normalized_query:
+                        logger.info(f"Expanded query: '{normalized_query}' → '{search_query}'")
+                        optimization_metadata['transformations'].append('query_expansion')
+                    
+                    # Step 2: Optional query transformation
+                    if self.retrieval_optimizer and (use_query_rewriting or use_hyde):
+                        if use_hyde:
+                            # HyDE: Generate hypothetical answer
+                            search_query = self.retrieval_optimizer.hyde_query(
+                                search_query,
+                                self.llm_service,
+                                self.system_role
+                            )
+                            optimization_metadata['transformations'].append('hyde')
+                            logger.info("Applied HyDE transformation")
+                        elif use_query_rewriting:
+                            # Query rewriting (on top of normalization)
+                            search_query = self.retrieval_optimizer.rewrite_query(
+                                search_query,
+                                self.llm_service
+                            )
+                            optimization_metadata['transformations'].append('query_rewriting')
+                            logger.info(f"Rewrote query: '{normalized_query}' → '{search_query}'")
+                    
+                    # Step 3: Generate query embedding (use transformed query)
+                    query_embedding = self.embeddings_service.embed_text(search_query)
+                    
+                    # Retrieve more candidates if using advanced retrieval
+                    initial_k = top_k * 10 if (self.retrieval_optimizer and (use_hybrid_search or use_reranking)) else top_k
+                    
+                    results = self.vector_store.query(
+                        collection_name=self.collection_name,
+                        query_embeddings=[query_embedding],
+                        n_results=initial_k,
+                        metadata_filter=combined_filter if combined_filter else None
+                    )
+                    
+                    # Extract context
+                    if results and results.get('documents') and len(results['documents']) > 0 and results['documents'][0]:
+                        context = results['documents'][0]
+                        retrieved_docs = [
+                            {
+                                'text': doc,
+                                'metadata': results['metadatas'][0][i] if results.get('metadatas') else {},
+                                'distance': results['distances'][0][i] if results.get('distances') else 0,
+                                'doc_id': i
+                            }
+                            for i, doc in enumerate(context)
+                            if not results['metadatas'][0][i].get('content_type') == 'question'  # Skip questions
+                        ]
+                        
+                        logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
+                        
+                        # Step 3: Apply advanced retrieval optimization
+                        if self.retrieval_optimizer and retrieved_docs:
+                            if use_hybrid_search or use_reranking:
+                                optimized_docs, opt_meta = self.retrieval_optimizer.optimize_retrieval(
+                                    collection_name=self.collection_name,
+                                    query=message,  # Use ORIGINAL query for reranking
+                                    vector_results=retrieved_docs,
+                                    llm_service=self.llm_service,
+                                    use_hybrid=use_hybrid_search,
+                                    use_reranking=use_reranking,
+                                    use_query_rewriting=False,  # Already done above
+                                    use_hyde=False,  # Already done above
+                                    top_k_initial=50,
+                                    top_k_final=top_k
+                                )
+                                retrieved_docs = optimized_docs
+                                optimization_metadata.update(opt_meta)
+                                logger.info(f"Applied optimization: {opt_meta['transformations']}")
+                        
+                        # Step 4: Retrieve parent chunks if using parent-child
+                        if retrieved_docs and any(doc['metadata'].get('has_parent') for doc in retrieved_docs):
+                            retrieved_docs = self._retrieve_parent_chunks(retrieved_docs)
+                            logger.info(f"Retrieved parent chunks for full context")
+                        
+                        context = [doc['text'] for doc in retrieved_docs]
+                        logger.info(f"Final document count: {len(retrieved_docs)}")
+                    else:
+                        logger.info("No documents found in collection for retrieval")
             except Exception as e:
                 logger.warning(f"Error during retrieval: {e}. Proceeding without retrieval.")
         
@@ -957,10 +1064,10 @@ class MultiClientRAGPipeline:
     def __init__(self):
         """Initialize the multi-client RAG manager."""
         self.pipelines: Dict[str, RAGPipeline] = {}
-        logger.info("MultiClientRAGPipeline initialized")
+        logger.info("MultiClientRAGPipeline initialized with lazy loading")
         
-        # Automatically restore existing clients from persisted data
-        self._restore_clients_from_disk()
+        # Don't restore clients on startup - use lazy loading instead
+        # Clients will be loaded on-demand when accessed
     
     def create_pipeline(
         self,
@@ -996,7 +1103,7 @@ class MultiClientRAGPipeline:
     
     def get_pipeline(self, client_id: str) -> Optional[RAGPipeline]:
         """
-        Get a client's RAG pipeline.
+        Get a client's RAG pipeline. Lazy-loads from disk if not in memory.
         
         Args:
             client_id: Client identifier
@@ -1004,7 +1111,15 @@ class MultiClientRAGPipeline:
         Returns:
             RAGPipeline instance or None if not found
         """
-        return self.pipelines.get(client_id)
+        # If already in memory, return it
+        if client_id in self.pipelines:
+            return self.pipelines[client_id]
+        
+        # Try to lazy-load from disk
+        if self._load_client_from_disk(client_id):
+            return self.pipelines[client_id]
+        
+        return None
     
     def delete_pipeline(self, client_id: str) -> bool:
         """
@@ -1019,69 +1134,83 @@ class MultiClientRAGPipeline:
         if client_id not in self.pipelines:
             return False
         
-        # Clear the collection
-        self.pipelines[client_id].clear_collection()
+        # Get collection name
+        collection_name = self.pipelines[client_id].collection_name
+        
+        # Delete the collection (permanently removes files from disk)
+        self.pipelines[client_id].vector_store.delete_collection(collection_name)
         
         # Remove from dictionary
         del self.pipelines[client_id]
         
-        logger.info(f"Deleted pipeline for client: {client_id}")
+        logger.info(f"Deleted pipeline for client: {client_id} (collection: {collection_name})")
         return True
     
     def list_clients(self) -> List[str]:
         """
-        List all client IDs with active pipelines.
+        List all client IDs (both loaded and available on disk).
         
         Returns:
             List of client IDs
         """
-        return list(self.pipelines.keys())
+        from pathlib import Path
+        
+        # Get clients currently in memory
+        loaded_clients = set(self.pipelines.keys())
+        
+        # Get clients available on disk
+        disk_clients = set()
+        vector_store_dir = Path(settings.vector_stores_dir) / "faiss"
+        if vector_store_dir.exists():
+            index_files = vector_store_dir.glob("client_*.index")
+            for index_file in index_files:
+                collection_name = index_file.stem
+                if collection_name.startswith("client_"):
+                    client_id = collection_name[7:]  # Remove "client_" prefix
+                    disk_clients.add(client_id)
+        
+        # Combine both sets and return sorted list
+        all_clients = loaded_clients.union(disk_clients)
+        return sorted(list(all_clients))
     
-    def _restore_clients_from_disk(self) -> None:
+    def _load_client_from_disk(self, client_id: str) -> bool:
         """
-        Restore client pipelines from persisted vector store files.
-        Automatically loads existing clients on server startup.
+        Lazy-load a single client from disk on-demand.
+        
+        Args:
+            client_id: Client identifier to load
+            
+        Returns:
+            True if loaded successfully, False otherwise
         """
         from pathlib import Path
         
+        # Check if index file exists
+        collection_name = f"client_{client_id}"
         vector_store_dir = Path(settings.vector_stores_dir) / "faiss"
-        if not vector_store_dir.exists():
-            logger.info("No vector store directory found, starting fresh")
-            return
+        index_path = vector_store_dir / f"{collection_name}.index"
         
-        # Find all .index files
-        index_files = list(vector_store_dir.glob("client_*.index"))
+        if not index_path.exists():
+            return False
         
-        if not index_files:
-            logger.info("No existing clients found")
-            return
-        
-        logger.info(f"Found {len(index_files)} persisted client(s), restoring...")
-        
-        for index_file in index_files:
-            # Extract client_id from filename (e.g., "client_acme.index" -> "acme")
-            collection_name = index_file.stem  # "client_acme"
-            if not collection_name.startswith("client_"):
-                continue
+        try:
+            logger.info(f"Lazy-loading client: {client_id}")
             
-            client_id = collection_name[7:]  # Remove "client_" prefix
+            # Create pipeline instance
+            pipeline = RAGPipeline(
+                collection_name=collection_name,
+                system_role="helpful assistant"
+            )
             
-            try:
-                # Create pipeline instance
-                pipeline = RAGPipeline(
-                    collection_name=collection_name,
-                    system_role="helpful assistant"
-                )
-                
-                # Load the persisted collection
-                pipeline.vector_store.load_collection(collection_name)
-                
-                # Add to pipelines dictionary
-                self.pipelines[client_id] = pipeline
-                
-                logger.info(f"Restored client: {client_id}")
-                
-            except Exception as e:
-                logger.error(f"Failed to restore client {client_id}: {e}")
-        
-        logger.info(f"Successfully restored {len(self.pipelines)} client(s)")
+            # Load the persisted collection
+            pipeline.vector_store.load_collection(collection_name)
+            
+            # Add to pipelines dictionary
+            self.pipelines[client_id] = pipeline
+            
+            logger.info(f"Successfully lazy-loaded client: {client_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to lazy-load client {client_id}: {e}")
+            return False

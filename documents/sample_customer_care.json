@@ -1,0 +1,124 @@
+{
+  "customer_care_database": [
+    {
+      "id": "PKG-001",
+      "category": "Shipping",
+      "type": "Package Information",
+      "question": "How do I track my package?",
+      "answer": "You can track your package in real-time using your tracking number. Simply enter the tracking number on our website or mobile app. You'll see the current location, estimated delivery date, and complete shipping history. If you don't have your tracking number, you can find it in your order confirmation email or by logging into your account.",
+      "tags": ["tracking", "delivery", "shipping"],
+      "priority": "high",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-002",
+      "category": "Shipping",
+      "type": "Package Information",
+      "question": "What shipping speeds are available?",
+      "answer": "We offer multiple shipping options to meet your needs: Standard Shipping (5-7 business days), Expedited Shipping (2-3 business days), and Express Overnight (next business day). Shipping costs vary based on package weight, destination, and selected speed. Free standard shipping is available on orders over $50.",
+      "tags": ["shipping speed", "delivery options", "cost"],
+      "priority": "high",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-003",
+      "category": "Returns",
+      "type": "Return Policy",
+      "question": "How do I return a package?",
+      "answer": "Returns are easy and free within 30 days of delivery. To start a return: 1) Log into your account and select the order 2) Choose the items to return and reason 3) Print the prepaid return label 4) Pack the items securely 5) Drop off at any authorized shipping location. Refunds are processed within 5-7 business days after we receive your return.",
+      "tags": ["returns", "refund", "policy"],
+      "priority": "high",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-004",
+      "category": "Packages",
+      "type": "Package Types",
+      "question": "What package sizes do you accept?",
+      "answer": "We accept packages of various sizes: Small (up to 12x9x4 inches, max 5 lbs), Medium (up to 18x14x8 inches, max 20 lbs), Large (up to 24x18x12 inches, max 50 lbs), and Extra Large (up to 36x24x18 inches, max 70 lbs). For oversized or heavy items over 70 lbs, please contact our freight department for specialized shipping options.",
+      "tags": ["package size", "dimensions", "weight limit"],
+      "priority": "medium",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-005",
+      "category": "International",
+      "type": "International Shipping",
+      "question": "Do you ship internationally?",
+      "answer": "Yes, we ship to over 200 countries worldwide. International shipping times vary by destination: Canada and Mexico (5-10 business days), Europe and Asia (7-14 business days), Other regions (10-21 business days). Please note that international shipments may be subject to customs duties and taxes, which are the recipient's responsibility. All international items must clear customs before final delivery.",
+      "tags": ["international", "customs", "global shipping"],
+      "priority": "medium",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-006",
+      "category": "Delivery Issues",
+      "type": "Lost or Damaged Package",
+      "question": "What if my package is lost or damaged?",
+      "answer": "If your package is lost or arrives damaged, we're here to help. For lost packages: Wait until 2 days after the estimated delivery date, then contact us to file a claim. We'll investigate with the carrier and issue a replacement or refund. For damaged packages: Take photos of the damage including the box and items, contact us within 48 hours, and keep all packaging materials. We'll arrange a replacement shipment or full refund immediately.",
+      "tags": ["lost package", "damaged", "claims", "insurance"],
+      "priority": "critical",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-007",
+      "category": "Pricing",
+      "type": "Shipping Costs",
+      "question": "How are shipping costs calculated?",
+      "answer": "Shipping costs are calculated based on three factors: package weight and dimensions (dimensional weight), destination zip code, and selected shipping speed. We use dimensional weight pricing, which is calculated as (Length x Width x Height) / 166 for domestic shipments. The final cost is based on whichever is greater: actual weight or dimensional weight. You can get an instant quote using our shipping calculator on the website.",
+      "tags": ["pricing", "cost calculation", "dimensional weight"],
+      "priority": "high",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-008",
+      "category": "Account",
+      "type": "Account Management",
+      "question": "How do I create a shipping account?",
+      "answer": "Creating a shipping account is free and easy. Visit our website and click 'Sign Up' in the top right corner. You'll need to provide: email address, password, full name, and billing address. Once registered, you can save shipping addresses, view order history, track packages, and access exclusive discounts. Business accounts are also available with additional features like bulk shipping, invoice billing, and dedicated support.",
+      "tags": ["account", "registration", "sign up"],
+      "priority": "medium",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-009",
+      "category": "Packaging",
+      "type": "Packaging Guidelines",
+      "question": "What are the packaging requirements?",
+      "answer": "Proper packaging ensures safe delivery: 1) Use a sturdy corrugated cardboard box in good condition 2) Wrap items individually with bubble wrap or packing paper 3) Fill empty spaces with packing peanuts or air pillows 4) Seal all openings with strong packaging tape 5) Place shipping label on the largest surface 6) For fragile items, mark the box as 'FRAGILE' on all sides. Free packaging supplies are available at our retail locations.",
+      "tags": ["packaging", "supplies", "safety"],
+      "priority": "medium",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-010",
+      "category": "Delivery Options",
+      "type": "Special Delivery",
+      "question": "Can I schedule a specific delivery time?",
+      "answer": "Yes, we offer flexible delivery options. Standard delivery occurs between 9 AM and 8 PM on business days. For an additional fee, you can schedule: Morning Delivery (before 12 PM), Evening Delivery (after 5 PM), or specific time windows (2-hour blocks). Saturday and Sunday delivery is available in most areas. You can also redirect packages to hold at our retail locations for pickup at your convenience.",
+      "tags": ["delivery scheduling", "time windows", "pickup"],
+      "priority": "medium",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-011",
+      "category": "Insurance",
+      "type": "Package Insurance",
+      "question": "Is my package insured?",
+      "answer": "All shipments include basic coverage up to $100 at no additional cost. For items valued over $100, we recommend purchasing additional insurance. Insurance rates are approximately 1% of the declared value. To file an insurance claim, you'll need the tracking number, proof of value (receipt or invoice), and documentation of damage or loss. Claims are typically processed within 10 business days.",
+      "tags": ["insurance", "coverage", "protection"],
+      "priority": "medium",
+      "updated": "2024-01-10"
+    },
+    {
+      "id": "PKG-012",
+      "category": "Business Services",
+      "type": "Corporate Shipping",
+      "question": "What business shipping services do you offer?",
+      "answer": "Our business services include: Volume Discounts (up to 40% off retail rates), Dedicated Account Manager, API Integration for automated shipping, Branded Tracking Pages, Monthly Invoice Billing, Free Packaging Supplies, Priority Customer Support, and Advanced Analytics Dashboard. We also offer customized solutions for e-commerce businesses, including integration with major platforms like Shopify, WooCommerce, and Amazon.",
+      "tags": ["business", "enterprise", "bulk shipping", "API"],
+      "priority": "high",
+      "updated": "2024-01-10"
+    }
+  ]
+}

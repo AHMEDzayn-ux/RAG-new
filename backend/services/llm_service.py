@@ -135,11 +135,14 @@ class LLMService:
         # Build system prompt for RAG
         system_prompt = self._get_rag_system_prompt(system_role)
         
-        return self.generate_response(
+        response = self.generate_response(
             query=query,
             context=context,
             system_prompt=system_prompt
         )
+        
+        # Clean citation phrases from response
+        return self._clean_citation_phrases(response)
     
     def generate_chat_response(
         self,
@@ -160,12 +163,15 @@ class LLMService:
         """
         system_prompt = self._get_chat_system_prompt()
         
-        return self.generate_response(
+        response = self.generate_response(
             query=query,
             context=context,
             system_prompt=system_prompt,
             conversation_history=conversation_history
         )
+        
+        # Clean citation phrases from response
+        return self._clean_citation_phrases(response)
     
     def _get_default_system_prompt(self) -> str:
         """Get the default system prompt."""
@@ -180,27 +186,76 @@ class LLMService:
         """
         role_desc = role or "helpful assistant"
         
-        return f"""You are a {role_desc}. Answer using ONLY provided context.
+        return f"""You are a {role_desc}. 
 
-Rules:
-1. Context has info → Answer and cite [Source 1], [Source 2]
-2. No context/irrelevant → Say "I don't have enough information"
-3. Handle pronouns (it, his, her) and vague terms (more, other) using context
+📋 CONTENT RULES:
+• Answer naturally, as if you know it personally
+• Never say "According to", "Based on", or cite sources
+• When context is provided, use it fully but speak naturally
+• Always give complete answers—include all relevant details, projects, skills, or experiences
+• Only omit information if truly irrelevant
 
-❌ Never make up info or use general knowledge
-✅ Always cite sources for facts: [Source 1], [Source 2]"""
+✨ FORMATTING RULES (VERY IMPORTANT):
+• Use bullet points (•) for lists - NOT numbered lists unless specific order matters
+• Break long content into SHORT paragraphs (2-3 sentences max)
+• Add line breaks between different topics/sections
+• Use clear, scannable structure - avoid huge text blocks
+• Make it visually appealing and easy to read at a glance
+
+Examples:
+
+❌ BAD (poor formatting):
+"He has worked on several projects including a database with fast retrieval and ACID operations and a 4-bit Nano Processor using VHDL and Basys 3 Board and an indoor sports court booking system with SMS alerts and a disaster management platform and an e-commerce platform."
+
+✅ GOOD (well formatted):
+"He has worked on several projects:
+
+• Database with fast retrieval and ACID-compliant operations
+• 4-bit Nano Processor using VHDL and Basys 3 Board
+• Indoor sports court booking system with SMS alerts
+• Disaster management platform with real-time reporting
+• E-commerce platform with optimized database design
+
+Each project showcases his skills in database design and system development."
+
+Always format responses for easy scanning and readability!"""
     
     def _get_chat_system_prompt(self) -> str:
         """Get system prompt for conversational chat."""
-        return """You are a helpful assistant.
+        return """You are a helpful assistant having a natural conversation.
 
-Rules:
-1. Context provided → Use ONLY that context, cite [Source 1], [Source 2]
-2. No context → Answer from conversation history
-3. Handle pronouns (it, his) and vague terms (more, other) using context
+📋 CONTENT RULES:
+1. Answer naturally - no formal citations
+2. NEVER write "According to [Context X]" or cite sources
+3. NEVER say "Based on the context provided"
+4. When context is provided: use it to answer, but write naturally
+5. Include ALL relevant details - don't hide information
+6. Only exclude info if truly not relevant
 
-❌ Never make up info
-✅ Cite sources: [Source 1], [Source 2]"""
+✨ FORMATTING RULES (CRITICAL FOR READABILITY):
+• Use bullet points (•) for lists of items
+• Break responses into SHORT paragraphs (2-3 sentences each)
+• Add blank lines between different topics
+• Make it easy to scan - avoid huge text blocks
+• Use clear visual structure
+
+Examples:
+
+❌ BAD (wall of text):
+"He has worked on several projects including database design and optimization for fast retrieval and ACID operations, a 4-bit Nano Processor using VHDL and Basys 3 Board for arithmetic operations, an indoor sports court booking system with convenient booking and SMS alerts and admin dashboard, a disaster management platform for reporting disasters and missing persons, and an e-commerce platform with database optimization."
+
+✅ GOOD (well formatted):
+"He has worked on several projects:
+
+• Database system with fast retrieval and ACID-compliant operations
+• 4-bit Nano Processor using VHDL and Basys 3 Board
+• Indoor sports court booking system with SMS alerts and admin dashboard
+• Disaster management platform for real-time reporting
+• E-commerce platform with optimized database design
+
+These projects demonstrate his expertise in database design, system development, and optimization."
+
+Always format for easy reading and quick comprehension!"""
     
     def _build_user_message(self, query: str, context: Optional[List[str]] = None) -> str:
         """
@@ -216,17 +271,70 @@ Rules:
         if not context:
             return query
         
-        # Build message with context
-        context_str = "\n\n".join([f"[Context {i+1}]\n{ctx}" for i, ctx in enumerate(context)])
+        # Build message with context - NO LABELS to avoid citations
+        context_str = "\n\n---\n\n".join(context)
         
-        message = f"""Context information:
+        message = f"""Information:
+
 {context_str}
+
+---
 
 Question: {query}
 
-Answer based on the context provided above:"""
+IMPORTANT Instructions:
+1. Use ALL the information provided above to give a COMPLETE and COMPREHENSIVE answer
+2. Do NOT summarize or hide important details - include everything relevant
+3. If there are multiple items (projects, skills, experiences, etc.), mention ALL of them
+4. Answer naturally without mentioning sources or contexts
+5. FORMAT properly: Use bullet points for lists, short paragraphs, and line breaks - NO huge text blocks!
+
+Answer:"""
         
         return message
+    
+    def _clean_citation_phrases(self, response: str) -> str:
+        """
+        Remove citation phrases that mention context sources.
+        
+        Args:
+            response: Raw LLM response
+        
+        Returns:
+            Cleaned response without citation phrases
+        """
+        import re
+        
+        # Patterns to remove (case-insensitive)
+        patterns = [
+            r"According to \[Context \d+\],?\s*",
+            r"Based on \[Context \d+\],?\s*",
+            r"As mentioned in \[Context \d+\],?\s*",
+            r"From \[Context \d+\],?\s*",
+            r"In \[Context \d+\],?\s*",
+            r"\[Context \d+\] states that\s*",
+            r"\[Context \d+\] mentions that\s*",
+            r"\[Context \d+\] indicates that\s*",
+            r"\[Source \d+\],?\s*",
+            r"According to the (provided )?context,?\s*",
+            r"Based on the (provided )?context,?\s*",
+            r"From the (provided )?context,?\s*",
+        ]
+        
+        cleaned = response
+        for pattern in patterns:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+        
+        # Clean up double spaces and leading spaces
+        cleaned = re.sub(r"  +", " ", cleaned)
+        cleaned = cleaned.strip()
+        
+        # Capitalize first letter if needed
+        if cleaned and cleaned[0].islower():
+            cleaned = cleaned[0].upper() + cleaned[1:]
+        
+        logger.debug(f"Cleaned citations: '{response[:100]}...' → '{cleaned[:100]}...'")
+        return cleaned
     
     def get_model_info(self) -> Dict[str, Any]:
         """

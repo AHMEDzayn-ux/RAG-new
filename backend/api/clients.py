@@ -76,9 +76,12 @@ async def create_client(client: ClientCreate):
 
 
 @router.get("", response_model=ClientListResponse)
-async def list_clients():
+async def list_clients(skip: int = 0, limit: int = 100):
     """
-    List all active RAG chatbot clients.
+    List all active RAG chatbot clients with pagination support.
+    
+    - **skip**: Number of clients to skip (for pagination)
+    - **limit**: Maximum number of clients to return (default: 100)
     
     Returns a list of client objects with details.
     """
@@ -86,8 +89,12 @@ async def list_clients():
         manager = get_pipeline_manager()
         client_ids = manager.list_clients()
         
+        # Apply pagination
+        total = len(client_ids)
+        paginated_ids = client_ids[skip:skip + limit]
+        
         client_list = []
-        for client_id in client_ids:
+        for client_id in paginated_ids:
             pipeline = manager.get_pipeline(client_id)
             if pipeline:
                 stats = pipeline.get_stats()
@@ -99,7 +106,7 @@ async def list_clients():
         
         return ClientListResponse(
             clients=client_list,
-            total=len(client_list)
+            total=total
         )
         
     except Exception as e:

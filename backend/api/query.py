@@ -54,8 +54,11 @@ async def query_documents(client_id: str, request: QueryRequest):
             return_sources=request.include_sources,
             use_hybrid_search=request.use_hybrid_search,
             use_reranking=request.use_reranking,
+            use_query_normalization=request.use_query_normalization,
             use_query_rewriting=request.use_query_rewriting,
-            use_hyde=request.use_hyde
+            use_hyde=request.use_hyde,
+            use_multi_query=request.use_multi_query,
+            num_query_variations=request.num_query_variations
         )
         
         # Format sources
@@ -131,8 +134,11 @@ async def chat_with_documents(client_id: str, request: ChatRequest):
             top_k=request.top_k,
             use_hybrid_search=request.use_hybrid_search,
             use_reranking=request.use_reranking,
+            use_query_normalization=request.use_query_normalization,
             use_query_rewriting=request.use_query_rewriting,
-            use_hyde=request.use_hyde
+            use_hyde=request.use_hyde,
+            use_multi_query=request.use_multi_query,
+            num_query_variations=request.num_query_variations
         )
         
         # Format sources

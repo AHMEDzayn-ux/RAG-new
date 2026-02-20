@@ -22,17 +22,35 @@ router = APIRouter(prefix="/api/clients", tags=["documents"])
 @router.post("/{client_id}/documents", response_model=DocumentUploadResponse)
 async def upload_documents(
     client_id: str,
-    file: UploadFile = File(..., description="PDF file to upload"),
+    file: UploadFile = File(..., description="Document file to upload (PDF or JSON)"),
     category: str = Form(default="general", description="Document category"),
     doc_type: str = Form(default="document", description="Document type")
 ):
     """
-    Upload a PDF document to a client's collection.
+    Upload a document to a client's collection.
     
+    Supported formats:
+    - **PDF**: Text documents, manuals, guides
+    - **JSON**: Customer care FAQs, package info, product catalogs
+    
+    Parameters:
     - **client_id**: The client to upload documents for
-    - **file**: PDF file to upload
-    - **category**: Category for organization (e.g., "admission", "policies")
-    - **doc_type**: Document type (e.g., "guide", "faq", "policy")
+    - **file**: Document file to upload (.pdf or .json)
+    - **category**: Category for organization (e.g., "admission", "packages", "faq")
+    - **doc_type**: Document type (e.g., "guide", "faq", "policy", "customer_care")
+    
+    JSON files should contain structured data like:
+    ```json
+    {
+      "items": [
+        {
+          "question": "How do I track my package?",
+          "answer": "You can track packages by...",
+          "category": "shipping"
+        }
+      ]
+    }
+    ```
     """
     try:
         manager = get_pipeline_manager()
@@ -44,11 +62,12 @@ async def upload_documents(
                 detail=f"Client '{client_id}' not found"
             )
         
-        # Validate file
-        if not file.filename.endswith('.pdf'):
+        # Validate file type
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in ['.pdf', '.json']:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid file type: {file.filename}. Only PDF files are allowed."
+                detail=f"Invalid file type: {file.filename}. Supported types: .pdf, .json"
             )
         
         # Save uploaded file temporarily and process
@@ -71,10 +90,10 @@ async def upload_documents(
             stats_before = pipeline.get_stats()
             doc_count_before = stats_before["document_count"]
             
-            # Index documents
-            logger.info(f"Indexing document for client '{client_id}'")
+            # Index documents (supports both PDF and JSON)
+            logger.info(f"Indexing {file_ext} document for client '{client_id}'")
             result = pipeline.index_documents(
-                pdf_paths=temp_files,
+                file_paths=temp_files,  # Use new file_paths parameter
                 metadata={
                     "category": category,
                     "doc_type": doc_type
@@ -88,12 +107,22 @@ async def upload_documents(
             
             logger.info(f"Indexed file, created {chunks_created} chunks")
             
-            return DocumentUploadResponse(
+            # Extract chunk previews from result
+            chunk_previews = result.get('chunk_previews', [])
+            logger.info(f"Chunk previews count: {len(chunk_previews)}")
+            if chunk_previews:
+                logger.info(f"First chunk preview: {chunk_previews[0]}")
+            
+            response = DocumentUploadResponse(
                 message=f"Successfully uploaded document",
                 files_processed=1,
                 chunks_created=chunks_created,
-                total_documents=doc_count_after
+                total_documents=doc_count_after,
+                chunk_previews=chunk_previews
             )
+            
+            logger.info(f"Response object: {response.model_dump()}")
+            return response
             
         finally:
             # Cleanup temp files
