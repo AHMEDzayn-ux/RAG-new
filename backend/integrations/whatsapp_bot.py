@@ -135,21 +135,29 @@ async def process_whatsapp_message(
         session_manager.add_message(phone_number, "user", message_text)
         
         # Initialize RAG pipeline for the configured client
-        rag = RAGPipeline(client_id=settings.whatsapp_client_id)
+        # Use collection_name format: client_{client_id}
+        collection_name = f"client_{settings.whatsapp_client_id}"
+        rag = RAGPipeline(collection_name=collection_name)
+        
+        # Load the collection from vector store
+        try:
+            rag.vector_store.load_collection(collection_name)
+            logger.info(f"Loaded collection: {collection_name}")
+        except Exception as e:
+            logger.error(f"Failed to load collection {collection_name}: {str(e)}")
+            raise
         
         # Get response from RAG system
-        result = await rag.chat(
-            query=message_text,
-            chat_history=history
+        result = rag.chat(
+            message=message_text,
+            conversation_history=history
         )
         
-        # Extract response and sources
-        response_text = result.get("response", "I couldn't generate a response.")
-        sources = result.get("sources", [])
+        # Extract response and sources (chat() returns 'answer' not 'response')
+        response_text = result.get("answer", "I couldn't generate a response.")
         
-        # Format response for WhatsApp
-        formatted_response = formatter.format_response(response_text, sources)
-        formatted_response = formatter.sanitize_markdown(formatted_response)
+        # Format response for WhatsApp (without sources)
+        formatted_response = formatter.sanitize_markdown(response_text)
         
         # Add assistant response to history
         session_manager.add_message(phone_number, "assistant", response_text)
