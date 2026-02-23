@@ -2,10 +2,12 @@ import { useState } from 'react';
 import ClientManager from './components/ClientManager';
 import DocumentUpload from './components/DocumentUpload';
 import ChatInterface from './components/ChatInterface';
+import VoiceChat from './components/VoiceChat';
 import './App.css';
 
 function App() {
     const [selectedClient, setSelectedClient] = useState(null);
+    const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'voice'
 
     return (
         <div className="app">
@@ -31,8 +33,30 @@ function App() {
                                 <DocumentUpload clientId={selectedClient} />
                             </div>
 
+                            {/* Tab Switcher */}
                             <div className="section">
-                                <ChatInterface clientId={selectedClient} />
+                                <div className="tab-switcher">
+                                    <button
+                                        className={`tab-button ${activeTab === 'chat' ? 'active' : ''}`}
+                                        onClick={() => setActiveTab('chat')}
+                                    >
+                                        💬 Text Chat
+                                    </button>
+                                    <button
+                                        className={`tab-button ${activeTab === 'voice' ? 'active' : ''}`}
+                                        onClick={() => setActiveTab('voice')}
+                                    >
+                                        🎙️ Voice Chat
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="section">
+                                {activeTab === 'chat' ? (
+                                    <ChatInterface clientId={selectedClient} />
+                                ) : (
+                                    <VoiceChat clientId={selectedClient} />
+                                )}
                             </div>
                         </>
                     )}

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     
     # API Keys
     groq_api_key: str = ""
+    openai_api_key: str = ""  # For voice TTS (text-to-speech)
     
     # Database
     database_url: str = "sqlite:///./rag_system.db"

@@ -1,0 +1,348 @@
+/* Voice Chat Container */
+.voice-chat-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    color: white;
+}
+
+.voice-chat-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.voice-chat-header h2 {
+    font-size: 2rem;
+    margin: 0 0 0.5rem 0;
+    font-weight: 700;
+}
+
+.voice-chat-header p {
+    font-size: 1rem;
+    opacity: 0.9;
+    margin: 0;
+}
+
+/* Voice Button Container */
+.voice-button-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    margin: 2rem 0;
+}
+
+.voice-button {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.voice-button span {
+    font-size: 0.9rem;
+    text-align: center;
+    max-width: 150px;
+}
+
+.voice-button.record:hover {
+    transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.voice-button.record:active {
+    transform: scale(0.95);
+}
+
+/* Microphone Icon */
+.mic-icon {
+    font-size: 4rem;
+    line-height: 1;
+}
+
+.mic-icon.recording {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Recording State */
+.voice-button.recording {
+    background: rgba(239, 68, 68, 0.3);
+    border: 3px solid rgba(239, 68, 68, 0.6);
+}
+
+/* Audio Visualizer */
+.audio-visualizer {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.pulse-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 3px solid rgba(239, 68, 68, 0.6);
+    animation: pulseRing 2s ease-out infinite;
+}
+
+.pulse-ring.delay-1 {
+    animation-delay: 0.3s;
+}
+
+.pulse-ring.delay-2 {
+    animation-delay: 0.6s;
+}
+
+@keyframes pulseRing {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Processing State */
+.voice-button.processing {
+    background: rgba(59, 130, 246, 0.3);
+    cursor: wait;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Playing State */
+.voice-button.playing {
+    background: rgba(16, 185, 129, 0.3);
+    border: 3px solid rgba(16, 185, 129, 0.6);
+}
+
+.speaker-icon {
+    font-size: 4rem;
+    line-height: 1;
+    animation: bounce 0.6s ease-in-out infinite;
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* Sound Waves Animation */
+.sound-waves {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.wave {
+    width: 4px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 4px;
+    animation: waveAnimation 0.8s ease-in-out infinite;
+}
+
+.wave:nth-child(1) { animation-delay: 0s; }
+.wave:nth-child(2) { animation-delay: 0.1s; }
+.wave:nth-child(3) { animation-delay: 0.2s; }
+.wave:nth-child(4) { animation-delay: 0.3s; }
+.wave:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes waveAnimation {
+    0%, 100% {
+        height: 20px;
+    }
+    50% {
+        height: 60px;
+    }
+}
+
+/* Results */
+.voice-result {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.voice-result strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.voice-result p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.transcription p {
+    font-style: italic;
+}
+
+/* Error */
+.voice-error {
+    background: rgba(239, 68, 68, 0.2);
+    border: 2px solid rgba(239, 68, 68, 0.5);
+    border-radius: 12px;
+    padding: 1rem;
+    margin: 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    75% { transform: translateX(10px); }
+}
+
+.voice-error span {
+    font-size: 1.5rem;
+}
+
+.voice-error p {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+/* Instructions */
+.voice-instructions {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 2rem;
+}
+
+.voice-instructions h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+}
+
+.voice-instructions ol {
+    margin: 0 0 1rem 0;
+    padding-left: 1.5rem;
+}
+
+.voice-instructions li {
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+}
+
+.voice-instructions .note {
+    background: rgba(255, 255, 255, 0.1);
+    border-left: 4px solid rgba(251, 191, 36, 0.8);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0 0 0;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .voice-chat-container {
+        padding: 1.5rem;
+        border-radius: 15px;
+    }
+
+    .voice-button {
+        width: 160px;
+        height: 160px;
+    }
+
+    .mic-icon, .speaker-icon {
+        font-size: 3rem;
+    }
+
+    .voice-button span {
+        font-size: 0.85rem;
+        max-width: 120px;
+    }
+
+    .voice-chat-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .voice-button-container {
+        min-height: 250px;
+    }
+}

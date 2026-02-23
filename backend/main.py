@@ -10,6 +10,7 @@ from logger import get_logger
 from api.clients import router as clients_router
 from api.documents import router as documents_router
 from api.query import router as query_router
+from api.voice import router as voice_router
 from integrations.whatsapp_bot import router as whatsapp_router
 from config import settings
 from security import SecurityMiddleware
@@ -79,6 +80,7 @@ app.add_middleware(
 app.include_router(clients_router)
 app.include_router(documents_router)
 app.include_router(query_router)
+app.include_router(voice_router)
 app.include_router(whatsapp_router)
 
 
