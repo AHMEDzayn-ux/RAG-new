@@ -55,6 +55,59 @@ STOPWORDS = {
 }
 
 
+# =========================================================================
+# SEMANTIC METADATA ENRICHMENT - TELECOM DOMAIN
+# =========================================================================
+
+METADATA_SYNONYMS = {
+    "category": {
+        "data": ["internet", "mobile data", "data package", "data plan", "broadband", "connectivity"],
+        "social": ["social media", "facebook", "instagram", "whatsapp", "messaging", "chat apps"],
+        "entertainment": ["video", "streaming", "youtube", "netflix", "media", "videos"],
+        "gaming": ["games", "esports", "online gaming", "multiplayer", "game streaming"],
+        "productivity": ["work", "business", "office", "professional", "remote work", "work from home"],
+        "combo": ["bundle", "package deal", "combined plan", "all-in-one", "hybrid plan"],
+        "roaming": ["international", "global", "travel", "overseas", "abroad", "foreign"]
+    },
+    "tags": {
+        "daily": ["day", "24 hours", "one day", "short term"],
+        "weekly": ["week", "7 days", "seven days"],
+        "monthly": ["month", "30 days", "long term"],
+        "budget": ["cheap", "affordable", "economical", "low cost", "value", "savings"],
+        "light_usage": ["light user", "basic", "casual", "minimal usage", "starter"],
+        "heavy_usage": ["heavy user", "unlimited", "high usage", "power user", "intensive"],
+        "youth": ["student", "young", "teen", "teenagers", "college", "university"],
+        "corporate": ["business", "enterprise", "professional", "company", "organization"],
+        "travel": ["roaming", "international", "abroad", "overseas", "foreign"],
+        "social_media": ["facebook", "instagram", "whatsapp", "twitter", "tiktok", "snapchat"],
+        "video_streaming": ["youtube", "netflix", "video", "streaming", "movies", "tv shows"],
+        "low_latency": ["fast", "quick", "responsive", "real-time", "instant"],
+        "remote_work": ["work from home", "wfh", "telecommute", "home office", "virtual office"]
+    },
+    "benefits": {
+        "unlimited": ["infinite", "no limit", "unrestricted", "limitless", "boundless"],
+        "priority": ["fast", "high speed", "premium speed", "prioritized", "accelerated"],
+        "night": ["nighttime", "overnight", "off-peak", "evening", "late night"]
+    }
+}
+
+METADATA_FIELD_LABELS = {
+    "package_id": "Package ID",
+    "name": "Package Name",
+    "category": "Category",
+    "validity_days": "Validity",
+    "price_lkr": "Price",
+    "anytime_data_gb": "Data Allowance",
+    "night_data_gb": "Night Data",
+    "roaming_data_gb": "Roaming Data",
+    "any_network_minutes": "Voice Minutes",
+    "sms_count": "SMS Count",
+    "tags": "Features",
+    "policy_id": "Policy ID",
+    "title": "Policy Title"
+}
+
+
 @dataclass
 class ChunkConfig:
     """Configuration for chunking parameters."""
@@ -1755,6 +1808,166 @@ class DocumentLoader:
         else:
             return str(value)
     
+    def _enrich_text_with_metadata(
+        self,
+        text: str,
+        metadata: Dict[str, Any],
+        enable_semantic: bool = True
+    ) -> str:
+        """Enrich text with semantic metadata for better retrieval.
+        
+        Adds structured metadata as semantic prefix to make metadata values
+        searchable. For example, a package with {"category": "data", "tags": ["budget"]}
+        becomes searchable for queries like "cheap internet plan".
+        
+        Args:
+            text: Original chunk text
+            metadata: Metadata dictionary to enrich
+            enable_semantic: Whether to add synonym expansion
+            
+        Returns:
+            Enriched text with semantic metadata prefix
+        """
+        if not metadata:
+            return text
+        
+        enrichment_parts = []
+        
+        # Package name (most important)
+        if "name" in metadata:
+            enrichment_parts.append(f"📦 {metadata['name']}")
+        
+        # Category with synonyms
+        if "category" in metadata:
+            category = metadata["category"]
+            category_text = f"Category: {category}"
+            if enable_semantic and category in METADATA_SYNONYMS.get("category", {}):
+                synonyms = METADATA_SYNONYMS["category"][category]
+                category_text += f" ({', '.join(synonyms[:3])})"  # Add top 3 synonyms
+            enrichment_parts.append(category_text)
+        
+        # Price information
+        if "price_lkr" in metadata:
+            price = metadata["price_lkr"]
+            enrichment_parts.append(f"💰 Price: LKR {price}")
+            # Add price tier semantic tags
+            if price < 500:
+                enrichment_parts.append("[Budget-friendly] [Affordable] [Economical]")
+            elif price < 1500:
+                enrichment_parts.append("[Mid-range] [Value pack]")
+            else:
+                enrichment_parts.append("[Premium] [High-end] [Professional]")
+        
+        # Validity period
+        if "validity_days" in metadata:
+            days = metadata["validity_days"]
+            if days == 1:
+                enrichment_parts.append("⏱️ Validity: Daily (1 day, 24 hours, short-term)")
+            elif days == 7:
+                enrichment_parts.append("⏱️ Validity: Weekly (7 days, one week)")
+            elif days == 30:
+                enrichment_parts.append("⏱️ Validity: Monthly (30 days, one month, long-term)")
+            else:
+                enrichment_parts.append(f"⏱️ Validity: {days} days")
+        
+        # Tags with synonyms
+        if "tags" in metadata:
+            tags = metadata["tags"] if isinstance(metadata["tags"], list) else [metadata["tags"]]
+            tag_texts = []
+            for tag in tags:
+                tag_text = tag.replace('_', ' ').title()
+                if enable_semantic and tag in METADATA_SYNONYMS.get("tags", {}):
+                    synonyms = METADATA_SYNONYMS["tags"][tag]
+                    tag_text += f" ({', '.join(synonyms[:2])})"  # Add top 2 synonyms
+                tag_texts.append(tag_text)
+            enrichment_parts.append(f"🏷️ Features: {' | '.join(tag_texts)}")
+        
+        # Data benefits (nested extraction)
+        if "benefits" in metadata and isinstance(metadata["benefits"], dict):
+            benefits = metadata["benefits"]
+            benefit_texts = []
+            
+            if benefits.get("anytime_data_gb"):
+                data_gb = benefits["anytime_data_gb"]
+                benefit_texts.append(f"{data_gb}GB data allowance")
+            
+            if benefits.get("night_data_gb"):
+                night_gb = benefits["night_data_gb"]
+                benefit_texts.append(f"{night_gb}GB bonus night data")
+            
+            if benefits.get("any_network_minutes"):
+                mins = benefits["any_network_minutes"]
+                benefit_texts.append(f"{mins} voice minutes")
+            
+            if benefits.get("sms_count"):
+                sms = benefits["sms_count"]
+                benefit_texts.append(f"{sms} SMS")
+            
+            # Boolean benefits
+            if benefits.get("whatsapp_unlimited"):
+                benefit_texts.append("Unlimited WhatsApp (messaging, chat, no limit)")
+            if benefits.get("facebook_unlimited"):
+                benefit_texts.append("Unlimited Facebook (social media, no limit)")
+            if benefits.get("instagram_unlimited"):
+                benefit_texts.append("Unlimited Instagram (social media, no limit)")
+            if benefits.get("youtube_unlimited"):
+                benefit_texts.append("Unlimited YouTube (video streaming, no limit)")
+            if benefits.get("gaming_priority_network"):
+                benefit_texts.append("Gaming priority network (low latency, fast, responsive)")
+            if benefits.get("zoom_priority"):
+                benefit_texts.append("Zoom priority (video conferencing, meetings)")
+            if benefits.get("teams_priority"):
+                benefit_texts.append("Microsoft Teams priority (collaboration, work)")
+            
+            if benefit_texts:
+                enrichment_parts.append(f"✨ Benefits: {' • '.join(benefit_texts)}")
+        
+        # Regions for roaming packages
+        if "regions_supported" in metadata:
+            regions = metadata["regions_supported"]
+            if isinstance(regions, list):
+                enrichment_parts.append(f"🌍 Coverage: {', '.join(regions)} (international, travel, abroad)")
+        
+        # Activation methods
+        if "activation" in metadata and isinstance(metadata["activation"], dict):
+            activation = metadata["activation"]
+            methods = []
+            if activation.get("ussd"):
+                methods.append(f"USSD: {activation['ussd']}")
+            if activation.get("sms"):
+                methods.append(f"SMS: {activation['sms']}")
+            if activation.get("app"):
+                methods.append("Mobile App")
+            if methods:
+                enrichment_parts.append(f"📱 Activate via: {' | '.join(methods)}")
+        
+        # Eligibility
+        if "eligibility" in metadata and isinstance(metadata["eligibility"], dict):
+            eligibility = metadata["eligibility"]
+            elig_parts = []
+            if eligibility.get("prepaid"):
+                elig_parts.append("Prepaid")
+            if eligibility.get("postpaid"):
+                elig_parts.append("Postpaid")
+            if eligibility.get("age_maximum"):
+                elig_parts.append(f"Youth (under {eligibility['age_maximum']})")
+            if elig_parts:
+                enrichment_parts.append(f"👥 Eligible for: {', '.join(elig_parts)}")
+        
+        # Policy-specific fields
+        if "policy_id" in metadata:
+            enrichment_parts.append(f"📋 Policy: {metadata['policy_id']}")
+        
+        if "title" in metadata and "name" not in metadata:  # For policies
+            enrichment_parts.append(f"📄 {metadata['title']}")
+        
+        # Combine enrichment with original text
+        if enrichment_parts:
+            enrichment_header = "\n".join(enrichment_parts)
+            return f"{enrichment_header}\n\n{'='*60}\n\n{text}"
+        
+        return text
+    
     def chunk_json_objects(
         self,
         json_objects: List[Dict[str, Any]],
@@ -1810,6 +2023,27 @@ class DocumentLoader:
                     if field in group[0]:
                         obj_metadata[field] = group[0][field]
             
+            # Also extract commonly used nested fields for enrichment
+            if group:
+                first_obj = group[0]
+                # Keep the original object fields for semantic enrichment
+                for key in ["name", "category", "price_lkr", "validity_days", "tags", 
+                           "benefits", "regions_supported", "activation", "eligibility",
+                           "policy_id", "title"]:
+                    if key in first_obj and key not in obj_metadata:
+                        obj_metadata[key] = first_obj[key]
+            
+            # ======== SEMANTIC METADATA ENRICHMENT ========
+            # Enrich text with semantic metadata for better retrieval
+            enriched_text = self._enrich_text_with_metadata(
+                combined_text,
+                obj_metadata,
+                enable_semantic=True
+            )
+            
+            # Store original text in metadata for display
+            obj_metadata["original_text"] = combined_text
+            
             # Create chunk metadata
             chunk_metadata = {
                 **base_metadata,
@@ -1820,16 +2054,16 @@ class DocumentLoader:
             }
             
             # Use standard chunking if text is too large
-            if len(combined_text) > 1500:  # If larger than max chunk size
-                sub_chunks = self.chunk_text(combined_text, chunk_metadata)
+            if len(enriched_text) > 2000:  # Increased threshold for enriched text
+                sub_chunks = self.chunk_text(enriched_text, chunk_metadata)
                 chunks.extend(sub_chunks)
             else:
-                # Single chunk
+                # Single chunk with enriched text
                 chunks.append({
-                    "text": combined_text,
+                    "text": enriched_text,  # Enriched for embeddings
                     "metadata": chunk_metadata,
                     "chunk_id": f"json_chunk_{len(chunks)}",
-                    "chunk_size": len(combined_text)
+                    "chunk_size": len(enriched_text)
                 })
         
         return chunks

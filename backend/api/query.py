@@ -46,12 +46,15 @@ async def query_documents(client_id: str, request: QueryRequest):
             )
         
         logger.info(f"Query for client '{client_id}': {request.question}")
+        if request.metadata_filter:
+            logger.info(f"Metadata filter: {request.metadata_filter}")
         
         # Execute query
         result = pipeline.query(
             question=request.question,
             top_k=request.top_k,
             return_sources=request.include_sources,
+            metadata_filter=request.metadata_filter,
             use_hybrid_search=request.use_hybrid_search,
             use_reranking=request.use_reranking,
             use_query_normalization=request.use_query_normalization,

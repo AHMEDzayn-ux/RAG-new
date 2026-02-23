@@ -190,16 +190,13 @@ class LLMService:
 
 📋 CONTENT RULES:
 • Answer naturally, as if you know it personally
-• Never say "According to", "Based on", or cite sources
-• When context is provided, use it fully but speak naturally
-• Always give complete answers—include all relevant details, projects, skills, or experiences
+• Always give complete answers
 • Only omit information if truly irrelevant
 
 ✨ FORMATTING RULES (VERY IMPORTANT):
 • Use bullet points (•) for lists - NOT numbered lists unless specific order matters
 • Break long content into SHORT paragraphs (2-3 sentences max)
 • Add line breaks between different topics/sections
-• Use clear, scannable structure - avoid huge text blocks
 • Make it visually appealing and easy to read at a glance
 
 Examples:
@@ -226,17 +223,12 @@ Always format responses for easy scanning and readability!"""
 
 📋 CONTENT RULES:
 1. Answer naturally - no formal citations
-2. NEVER write "According to [Context X]" or cite sources
-3. NEVER say "Based on the context provided"
-4. When context is provided: use it to answer, but write naturally
 5. Include ALL relevant details - don't hide information
 6. Only exclude info if truly not relevant
 
 ✨ FORMATTING RULES (CRITICAL FOR READABILITY):
 • Use bullet points (•) for lists of items
-• Break responses into SHORT paragraphs (2-3 sentences each)
 • Add blank lines between different topics
-• Make it easy to scan - avoid huge text blocks
 • Use clear visual structure
 
 Examples:
@@ -283,10 +275,9 @@ Always format for easy reading and quick comprehension!"""
 Question: {query}
 
 IMPORTANT Instructions:
-1. Use ALL the information provided above to give a COMPLETE and COMPREHENSIVE answer
-2. Do NOT summarize or hide important details - include everything relevant
-3. If there are multiple items (projects, skills, experiences, etc.), mention ALL of them
-4. Answer naturally without mentioning sources or contexts
+1. Use ALL the information provided above to give a COMPLETE  answer
+2. Do NOT hide important details - include everything relevant
+4. Answer naturally
 5. FORMAT properly: Use bullet points for lists, short paragraphs, and line breaks - NO huge text blocks!
 
 Answer:"""

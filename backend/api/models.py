@@ -97,6 +97,7 @@ class QueryRequest(BaseModel):
     question: str = Field(..., description="The question to ask")
     top_k: int = Field(default=6, ge=1, le=15, description="Number of documents to retrieve")
     include_sources: bool = Field(default=True, description="Include source documents in response")
+    metadata_filter: Optional[Dict[str, Any]] = Field(default=None, description="Filter by metadata (e.g., {\"category\": \"data\", \"tags\": \"budget\"})")
     use_hybrid_search: bool = Field(default=True, description="Enable hybrid vector+keyword search")
     use_reranking: bool = Field(default=True, description="Enable cross-encoder re-ranking")
     use_query_normalization: bool = Field(default=True, description="Enable smart query normalization (abbreviations, typos, semantic expansion)")
@@ -108,9 +109,10 @@ class QueryRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "question": "What are the admission requirements?",
+                "question": "What are the cheapest data plans?",
                 "top_k": 3,
                 "include_sources": True,
+                "metadata_filter": {"category": "data", "tags": "budget"},
                 "use_hybrid_search": True,
                 "use_reranking": True,
                 "use_query_normalization": True,

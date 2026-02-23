@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     multi_query_variations: int = 3
     multi_query_boost_original: float = 1.5
     
+    # Semantic Metadata Settings
+    enable_semantic_metadata: bool = True  # Embed metadata values into searchable content
+    metadata_synonym_expansion: bool = True  # Add synonyms for metadata values
+    semantic_metadata_position: str = "prefix"  # "prefix", "suffix", or "both"
+    
     # WhatsApp Integration
     whatsapp_verify_token: str = "your_verify_token_here"
     whatsapp_access_token: str = ""
