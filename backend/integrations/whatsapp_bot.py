@@ -137,7 +137,31 @@ async def process_whatsapp_message(
         # Initialize RAG pipeline for the configured client
         # Use collection_name format: client_{client_id}
         collection_name = f"client_{settings.whatsapp_client_id}"
-        rag = RAGPipeline(collection_name=collection_name)
+        
+        # Custom system role for WhatsApp - natural, conversational responses
+        whatsapp_system_role = (
+            "You are a friendly Nexus Telecommunication customer support assistant. "
+            "CRITICAL RULES - NEVER BREAK THESE:\n"
+            "1. NEVER mention policy IDs (like SIM_REPLACEMENT_POLICY, FUP_STANDARD, etc.)\n"
+            "2. NEVER mention document names, source references, or metadata\n"
+            "3. NEVER mention 'policy' or 'according to policy' - just give the information directly\n"
+            "4. ONLY use information that DIRECTLY answers the user's question\n"
+            "5. If retrieved documents are NOT relevant, IGNORE them completely\n\n"
+            "Examples of what NOT to do:\n"
+            "❌ 'The policy in question is SIM_REPLACEMENT_POLICY...'\n"
+            "❌ 'According to the policy...'\n"
+            "❌ 'The policy states that...'\n\n"
+            "Examples of what TO do:\n"
+            "✅ 'Call 1234 to deactivate your SIM...'\n"
+            "✅ 'Here are the steps to...'\n\n"
+            "Be conversational, friendly, and direct. Use bullet points (•) for multiple steps. "
+            "Keep responses short but complete."
+        )
+        
+        rag = RAGPipeline(
+            collection_name=collection_name,
+            system_role=whatsapp_system_role
+        )
         
         # Load the collection from vector store
         try:
@@ -147,10 +171,14 @@ async def process_whatsapp_message(
             logger.error(f"Failed to load collection {collection_name}: {str(e)}")
             raise
         
-        # Get response from RAG system
+        # Get response from RAG system with optimized parameters
         result = rag.chat(
             message=message_text,
-            conversation_history=history
+            conversation_history=history,
+            top_k=4,  # Retrieve 4 most relevant documents
+            use_hybrid_search=True,  # Combine vector + keyword search
+            use_reranking=True,  # Re-rank for better precision
+            use_query_normalization=True  # Fix typos, expand abbreviations
         )
         
         # Extract response and sources (chat() returns 'answer' not 'response')

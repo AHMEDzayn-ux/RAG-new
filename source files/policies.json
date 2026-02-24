@@ -91,6 +91,50 @@
         "Porting process takes 2–3 working days.",
         "Temporary service interruption may occur."
       ]
+    },
+
+    {
+      "policy_id": "LOST_PHONE_POLICY",
+      "title": "Lost or Stolen Phone Procedure",
+      "rules": [
+        "Immediately call customer service hotline (dial 1234 from any Nexus number or +94-11-1234567).",
+        "Your SIM will be temporarily blocked within 15 minutes to prevent unauthorized use.",
+        "Visit nearest Nexus outlet with your original NIC to get a replacement SIM.",
+        "Replacement SIM will have the same phone number.",
+        "Temporary block is free, replacement SIM fee applies (LKR 100).",
+        "Report to police if phone was stolen and keep the report for insurance claims."
+      ],
+      "emergency_contacts": {
+        "hotline": "1234",
+        "international": "+94-11-1234567",
+        "hours": "24/7"
+      }
+    },
+
+    {
+      "policy_id": "SIM_DEACTIVATION_POLICY",
+      "title": "SIM Deactivation Procedure",
+      "rules": [
+        "Call customer service hotline: 1234 (from Nexus number) or +94-11-1234567.",
+        "Provide your NIC number and phone number for verification.",
+        "Confirm you want to permanently deactivate the SIM.",
+        "Outstanding bills must be cleared before deactivation.",
+        "Deactivation is processed within 24 hours.",
+        "No refunds for unused package balance.",
+        "Phone number becomes available for reassignment after 90 days.",
+        "To reactivate later, you need to purchase a new SIM with a new number."
+      ],
+      "contact_info": {
+        "hotline": "1234",
+        "international": "+94-11-1234567",
+        "hours": "24/7",
+        "visit_outlet": "For immediate deactivation, visit any Nexus outlet with your NIC"
+      },
+      "important_notes": [
+        "This is permanent - you cannot reactivate the same number",
+        "Clear all outstanding bills first",
+        "Consider temporary suspension instead if you may use the number again"
+      ]
     }
 
   ]

@@ -440,6 +440,35 @@ class RAGPipeline:
             
             logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
             
+            # Step 3.5: Apply distance-based relevance filtering
+            if settings.enable_distance_filtering and retrieved_docs:
+                before_count = len(retrieved_docs)
+                
+                # Filter documents by distance threshold
+                filtered_docs = [
+                    doc for doc in retrieved_docs 
+                    if doc['distance'] <= settings.distance_threshold
+                ]
+                
+                # Ensure minimum results (keep best document even if below threshold)
+                if len(filtered_docs) < settings.min_results_after_filter and retrieved_docs:
+                    # Keep the top documents by distance (lower is better)
+                    sorted_docs = sorted(retrieved_docs, key=lambda x: x['distance'])
+                    filtered_docs = sorted_docs[:settings.min_results_after_filter]
+                    logger.warning(
+                        f"Distance filtering would remove all results. "
+                        f"Keeping {settings.min_results_after_filter} best document(s) "
+                        f"(distance: {filtered_docs[0]['distance']:.3f})"
+                    )
+                elif filtered_docs:
+                    logger.info(
+                        f"Distance filtering: {before_count} → {len(filtered_docs)} docs "
+                        f"(threshold={settings.distance_threshold}, "
+                        f"distances: {['{:.3f}'.format(doc['distance']) for doc in filtered_docs]})"
+                    )
+                
+                retrieved_docs = filtered_docs
+            
             # Step 4: Apply advanced retrieval optimization
             if self.retrieval_optimizer and retrieved_docs:
                 if use_hybrid_search or use_reranking:
@@ -933,6 +962,35 @@ class RAGPipeline:
                         ]
                         
                         logger.info(f"Retrieved {len(retrieved_docs)} candidates from vector search")
+                        
+                        # Step 2.5: Apply distance-based relevance filtering
+                        if settings.enable_distance_filtering and retrieved_docs:
+                            before_count = len(retrieved_docs)
+                            
+                            # Filter documents by distance threshold
+                            filtered_docs = [
+                                doc for doc in retrieved_docs 
+                                if doc['distance'] <= settings.distance_threshold
+                            ]
+                            
+                            # Ensure minimum results (keep best document even if below threshold)
+                            if len(filtered_docs) < settings.min_results_after_filter and retrieved_docs:
+                                # Keep the top documents by distance (lower is better)
+                                sorted_docs = sorted(retrieved_docs, key=lambda x: x['distance'])
+                                filtered_docs = sorted_docs[:settings.min_results_after_filter]
+                                logger.warning(
+                                    f"Distance filtering would remove all results. "
+                                    f"Keeping {settings.min_results_after_filter} best document(s) "
+                                    f"(distance: {filtered_docs[0]['distance']:.3f})"
+                                )
+                            elif filtered_docs:
+                                logger.info(
+                                    f"Distance filtering: {before_count} → {len(filtered_docs)} docs "
+                                    f"(threshold={settings.distance_threshold}, "
+                                    f"distances: {['{:.3f}'.format(doc['distance']) for doc in filtered_docs]})"
+                                )
+                            
+                            retrieved_docs = filtered_docs
                         
                         # Step 3: Apply advanced retrieval optimization
                         if self.retrieval_optimizer and retrieved_docs:

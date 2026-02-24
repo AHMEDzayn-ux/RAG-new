@@ -1,7 +1,7 @@
 .chat-interface {
   display: flex;
   flex-direction: column;
-  height: 650px;
+  height: 750px;
   background: white;
   border-radius: 16px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
@@ -300,7 +300,7 @@
 
 .message {
   margin-bottom: 24px;
-  max-width: 80%;
+  max-width: 90%;
   animation: messageSlide 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

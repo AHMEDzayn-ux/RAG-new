@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # Retrieval
     retrieval_top_k: int = 10  # Increased from 6 to 10 for more comprehensive answers
     
+    # Distance-based Relevance Filtering
+    enable_distance_filtering: bool = True  # Filter out irrelevant results based on distance threshold
+    distance_threshold: float = 1.3  # L2 distance threshold (0=identical, 2=very different)
+    min_results_after_filter: int = 1  # Minimum results to return even if below threshold
+    
     # Advanced Retrieval Features (ordered by cost-effectiveness)
     use_query_normalization: bool = True  # NEW - lightweight, enabled by default
     use_hybrid_search: bool = True

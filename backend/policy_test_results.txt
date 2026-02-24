@@ -1,0 +1,94 @@
+
+================================================================================
+SEARCH RESULTS FOR: 'video streaming fair usage'
+================================================================================
+
+[Document 1]
+Distance: 0.758
+Policy ID: FUP_VIDEO
+Title: Video Streaming Fair Usage
+
+Stored Text:
+--------------------------------------------------------------------------------
+📋 Policy: FUP_VIDEO
+📄 Video Streaming Fair Usage
+
+============================================================
+
+Video Streaming Fair Usage
+Rules: Video resolution may be limited to 720p., Speed reduction after 50GB consumption.
+Policy Id: FUP_VIDEO
+--------------------------------------------------------------------------------
+
+Original Text (if different):
+Video Streaming Fair Usage
+Rules: Video resolution may be limited to 720p., Speed reduction after 50GB consumption.
+Policy Id: FUP_VIDEO
+
+================================================================================
+
+[Document 2]
+Distance: 1.000
+Policy ID: N/A
+Title: N/A
+
+Stored Text:
+--------------------------------------------------------------------------------
+📦 YouTube Unlimited Monthly
+Category: entertainment (video, streaming, youtube)
+💰 Price: LKR 999
+[Mid-range] [Value pack]
+⏱️ Validity: Monthly (30 days, one month, long-term)
+🏷️ Features: Monthly (month, 30 days) | Video Streaming (youtube, netflix)
+✨ Benefits: 5GB data allowance • Unlimited YouTube (video streaming, no limit)
+📱 Activate via: USSD: *123*40# | SMS: YT30 to 1234 | Mobile App
+
+============================================================
+
+YouTube Unlimited Monthly
+entertainment
+Package Id: youtube_unlimited_monthly
+Validity Days: 30
+Price Lkr: 999
+Benefits: Youtube Unlimited: True • Anytime Data Gb: 5
+Fair Usage Policy: FUP_VIDEO
+Activation: Ussd: *123*40# • Sms: YT30 to 1234 • App: True
+Tags: monthly, video_streaming
+--------------------------------------------------------------------------------
+
+Original Text (if different):
+YouTube Unlimited Monthly
+entertainment
+Package Id: youtube_unlimited_monthly
+Validity Days: 30
+Price Lkr: 999
+Benefits: Youtube Unlimited: True • Anytime Data Gb: 5
+Fair Usage Policy: FUP_VIDEO
+Activation: Ussd: *123*40# • Sms: YT30 to 1234 • App: True
+Tags: monthly, video_streaming
+
+================================================================================
+
+[Document 3]
+Distance: 1.102
+Policy ID: FUP_SOCIAL
+Title: Social Media Fair Usage
+
+Stored Text:
+--------------------------------------------------------------------------------
+📋 Policy: FUP_SOCIAL
+📄 Social Media Fair Usage
+
+============================================================
+
+Social Media Fair Usage
+Rules: Unlimited access limited to WhatsApp, Facebook, Instagram., Video calls are not included., High usage may reduce speed after 20GB threshold.
+Policy Id: FUP_SOCIAL
+--------------------------------------------------------------------------------
+
+Original Text (if different):
+Social Media Fair Usage
+Rules: Unlimited access limited to WhatsApp, Facebook, Instagram., Video calls are not included., High usage may reduce speed after 20GB threshold.
+Policy Id: FUP_SOCIAL
+
+================================================================================

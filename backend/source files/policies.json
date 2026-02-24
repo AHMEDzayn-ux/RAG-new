@@ -38,7 +38,7 @@
       "title": "SIM Ownership Policy",
       "rules": [
         "SIM must be registered under valid NIC.",
-        "Ownership change requires physical presence of current owner.",
+        "Ownership change requires physical presence of current and new owner.",
         "Biometric verification required."
       ]
     },

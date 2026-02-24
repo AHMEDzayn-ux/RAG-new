@@ -86,19 +86,62 @@
   letter-spacing: 0.3px;
 }
 
+.client-selector {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.client-selector label {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.client-dropdown {
+  padding: 10px 16px;
+  font-size: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 300px;
+  font-weight: 500;
+}
+
+.client-dropdown:hover {
+  background: white;
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.client-dropdown:focus {
+  outline: none;
+  border-color: white;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
 .app-main {
   flex: 1;
-  padding: 30px 20px;
+  padding: 20px 20px;
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
 .section {
   margin-bottom: 30px;
   animation: sectionAppear 0.5s ease-out both;
+}
+
+.section.chat-section {
+  margin-bottom: 10px;
 }
 
 .section:nth-child(1) {

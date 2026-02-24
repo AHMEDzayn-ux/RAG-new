@@ -1705,7 +1705,9 @@ class DocumentLoader:
         text_field_patterns = [
             'description', 'content', 'text', 'body', 'message', 'details',
             'answer', 'response', 'summary', 'info', 'information',
-            'question', 'query', 'title', 'name', 'subject'
+            'question', 'query', 'title', 'name', 'subject',
+            'rules', 'policy', 'procedure', 'steps', 'instructions',  # Policy-specific fields
+            'benefits', 'features', 'includes'  # Package-specific fields
         ]
         
         # Common metadata field names
@@ -1717,22 +1719,27 @@ class DocumentLoader:
         for field, value in sample_obj.items():
             field_lower = field.lower()
             
-            # Check if it's a text field
+            # Check if it's a text field based on name
             is_text_field = any(pattern in field_lower for pattern in text_field_patterns)
             is_metadata_field = any(pattern in field_lower for pattern in metadata_field_patterns)
             
-            # Also consider value type and length
-            if isinstance(value, str):
-                if len(value) > 50 or is_text_field:  # Long strings likely contain text
+            # Prioritize field name patterns over type
+            if is_text_field:
+                text_fields.append(field)
+            elif is_metadata_field:
+                metadata_fields.append(field)
+            # Then check value type
+            elif isinstance(value, str):
+                if len(value) > 50:  # Long strings likely contain text
                     text_fields.append(field)
                 else:
                     metadata_fields.append(field)
-            elif is_metadata_field or isinstance(value, (int, float, bool)):
+            elif isinstance(value, (int, float, bool)):
                 metadata_fields.append(field)
-            elif isinstance(value, dict):
-                metadata_fields.append(field)  # Nested objects as metadata
-            elif isinstance(value, list):
-                metadata_fields.append(field)  # Arrays as metadata
+            elif isinstance(value, (dict, list)):
+                metadata_fields.append(field)  # Complex types as metadata by default
+            else:
+                metadata_fields.append(field)
         
         return text_fields, metadata_fields
     
@@ -1764,6 +1771,12 @@ class DocumentLoader:
                     value = obj[field]
                     if isinstance(value, str) and value.strip():
                         lines.append(value.strip())
+                    else:
+                        # For non-string text fields (lists, dicts), format them
+                        formatted_value = self._format_json_value(value, depth=0, max_depth=max_nesting_depth)
+                        if formatted_value:
+                            field_name = field.replace('_', ' ').title()
+                            lines.append(f"{field_name}: {formatted_value}")
         
         # Add other fields if requested
         if include_all_fields:
