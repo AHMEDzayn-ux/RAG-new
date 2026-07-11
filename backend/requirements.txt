@@ -1,3 +1,9 @@
+# CPU-only PyTorch build (the default PyPI wheel bundles CUDA libs and is
+# several times larger/heavier in memory - not needed on Render's CPU-only dynos,
+# and was pushing the free-tier 512MB limit).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.2
+
 # Core RAG dependencies
 langchain>=0.1.0
 langchain-community>=0.0.13
