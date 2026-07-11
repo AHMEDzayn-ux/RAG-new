@@ -44,4 +44,13 @@ async def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=MeResponse)
 async def me(user: User = Depends(require_admin)):
-    return MeResponse(id=user.id, email=user.email, name=user.name, is_superadmin=user.is_superadmin)
+    # role may be NULL on the legacy bootstrap admin (added by migration) — derive it.
+    role = user.role or ("superadmin" if user.is_superadmin else "operator")
+    return MeResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        is_superadmin=user.is_superadmin,
+        role=role,
+        client_slug=user.client_slug,
+    )

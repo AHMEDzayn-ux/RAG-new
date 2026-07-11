@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClient, listClients, deleteClient, listDomains } from '../services/api';
+import Icon from './Icon';
 import './ClientManager.css';
 
 const slugify = (s) =>
@@ -74,7 +75,7 @@ const ClientManager = ({ onClientSelect, selectedClient }) => {
 
     return (
         <div className="client-manager">
-            <h2>➕ Create a Client</h2>
+            <h2><Icon name="plus" size={18} /> Create a client</h2>
             {error && <div className="error-message">{error}</div>}
 
             <form onSubmit={handleCreate} className="create-client-form">

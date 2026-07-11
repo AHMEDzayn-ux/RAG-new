@@ -39,7 +39,7 @@ DOMAIN_TEMPLATES: Dict[str, DomainTemplate] = {
         normalization_context="general customer support documents",
         few_shot_examples=[],
         bot_name="Support Assistant",
-        greeting="Hi! 👋 How can I help you today?",
+        greeting="Hi! How can I help you today?",
     ),
     "telecom": DomainTemplate(
         key="telecom",
@@ -53,7 +53,7 @@ DOMAIN_TEMPLATES: Dict[str, DomainTemplate] = {
         normalization_context="telecommunication packages, data plans, and billing policies",
         few_shot_examples=[
             "User: hi\n"
-            "You: Hi! 👋 How can I help you today — packages, billing, or something else?",
+            "You: Hi! How can I help you today — packages, billing, or something else?",
             "User: how do i replace my sim\n"
             "You: To replace your SIM, visit an authorized store or contact support, fill out a replacement form, bring a valid ID, and pay a small replacement fee. Want the exact fee and locations?  (Note: answer ONLY the SIM process — do not list any plan details.)",
             "User: give me a youtube package\n"
@@ -62,7 +62,7 @@ DOMAIN_TEMPLATES: Dict[str, DomainTemplate] = {
             "You: It's 50GB — after that your data is deprioritized (slower at peak times). Need anything else?",
         ],
         bot_name="Customer Support",
-        greeting="Hi! 👋 I can help with packages, billing, and activation. What do you need?",
+        greeting="Hi! I can help with packages, billing, and activation. What do you need?",
     ),
     "university": DomainTemplate(
         key="university",
@@ -81,7 +81,7 @@ DOMAIN_TEMPLATES: Dict[str, DomainTemplate] = {
             "You: The CS program fee is the amount listed for that intake — I can break down tuition vs. registration if you'd like.",
         ],
         bot_name="Student Assistant",
-        greeting="Hi! 🎓 Ask me about courses, enrollment, fees, or university procedures.",
+        greeting="Hi! Ask me about courses, enrollment, fees, or university procedures.",
     ),
 }
 

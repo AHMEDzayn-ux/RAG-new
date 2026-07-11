@@ -26,6 +26,7 @@ from api.voice import router as voice_router
 from api.public import router as public_router
 from api.meta import router as meta_router
 from api.auth_routes import router as auth_router
+from api.portal import router as portal_router
 from integrations.whatsapp_bot import router as whatsapp_router
 from config import settings
 from security import SecurityMiddleware
@@ -76,16 +77,16 @@ app.add_middleware(SecurityMiddleware)
 if settings.environment == "production":
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["api.yourdomain.com", "localhost", "127.0.0.1"]
+        allowed_hosts=["api.yourdomain.com", "*.onrender.com", "localhost", "127.0.0.1"]
     )
 
 # Configure CORS based on environment
 if settings.environment == "production":
-    # Production: Restrict to Vercel deployments and specific origins
+    # Production: Restrict to Vercel/Render deployments and specific origins
     allowed_origins = []
-    # Allow all Vercel deployments with regex
-    allowed_origin_regex = r"https://rag-new-.*\.vercel\.app"
-    logger.info(f"CORS restricted to Vercel deployments: {allowed_origin_regex}")
+    # Allow all Vercel and Render deployments with regex
+    allowed_origin_regex = r"https://(rag-new-.*\.vercel\.app|.*\.onrender\.com)"
+    logger.info(f"CORS restricted to Vercel/Render deployments: {allowed_origin_regex}")
 else:
     # Development: Allow localhost + Vercel deployments
     allowed_origins = [
@@ -122,6 +123,7 @@ app.include_router(documents_router)
 app.include_router(query_router)
 app.include_router(voice_router)
 app.include_router(whatsapp_router)
+app.include_router(portal_router)
 
 
 @app.get("/widget.js")

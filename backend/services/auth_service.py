@@ -73,12 +73,15 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
 
 
 def create_user(db: Session, email: str, password: str, name: str = "",
-                is_superadmin: bool = False) -> User:
+                is_superadmin: bool = False, role: str = "operator",
+                client_slug: Optional[str] = None) -> User:
     user = User(
         email=email.strip().lower(),
         password_hash=hash_password(password),
         name=name or None,
         is_superadmin=is_superadmin,
+        role="superadmin" if is_superadmin else role,
+        client_slug=client_slug,
     )
     db.add(user)
     db.commit()
@@ -100,6 +103,36 @@ def authenticate(db: Session, email: str, password: str) -> Optional[User]:
     if user and verify_password(password, user.password_hash):
         return user
     return None
+
+
+# ---- Per-client admin accounts (portal logins) ------------------------------
+
+def create_client_admin(db: Session, slug: str, email: str, password: str,
+                        name: str = "") -> User:
+    """Create a client_admin login bound to one tenant (its /portal/{slug} console)."""
+    return create_user(
+        db, email=email, password=password, name=name,
+        is_superadmin=False, role="client_admin", client_slug=slug,
+    )
+
+
+def list_client_admins(db: Session, slug: str) -> list:
+    """All client_admin users scoped to this tenant."""
+    return (
+        db.query(User)
+        .filter(User.client_slug == slug, User.role == "client_admin")
+        .order_by(User.created_at.desc())
+        .all()
+    )
+
+
+def delete_user(db: Session, user_id: int) -> bool:
+    user = db.get(User, user_id)
+    if user is None:
+        return False
+    db.delete(user)
+    db.commit()
+    return True
 
 
 def bootstrap_admin(db: Session) -> None:

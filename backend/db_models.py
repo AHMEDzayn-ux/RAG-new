@@ -34,6 +34,10 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     name = Column(String, nullable=True)
     is_superadmin = Column(Boolean, nullable=False, default=False)
+    # Role + tenant binding. operator/superadmin manage the SaaS (client_slug NULL);
+    # a client_admin is scoped to exactly one tenant and signs into /portal/{slug}.
+    role = Column(String, nullable=False, default="operator")  # superadmin | operator | client_admin
+    client_slug = Column(String, index=True, nullable=True)     # set for client_admin users
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 

@@ -34,6 +34,7 @@ from config import get_settings
 from logger import get_logger
 from database import SessionLocal
 from services import client_store
+from services.text_utils import strip_emojis
 from services.tts_service import synthesize
 
 logger = get_logger(__name__)
@@ -212,6 +213,7 @@ def _strip_markdown(text: str) -> str:
     t = re.sub(r"^\s*[-*+]\s+", "", t, flags=re.MULTILINE)  # bullet markers
     t = re.sub(r"[*_]{1,3}([^*_]+)[*_]{1,3}", r"\1", t)    # bold/italic
     t = re.sub(r"[*_#>`]", "", t)                          # stray markdown chars
+    t = strip_emojis(t)                                    # TTS reads emoji names aloud
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n{2,}", "\n", t)
     return t.strip()
@@ -488,8 +490,13 @@ async def _handle_utterance(websocket, pipeline, slug, session_id, history,
     history.append({"role": "user", "content": user_text})
     history.append({"role": "assistant", "content": answer})
 
-    # 3. Persist the turn (same learning-loop memory as chat) — log the raw answer.
-    _log_turn(slug, session_id, user_text, result)
+    # 3. Persist the turn in the BACKGROUND (off the event loop). The DB write is
+    #    blocking, so running it inline here — before speaking — would both delay
+    #    time-to-first-audio and stall the event loop for every connection. Fire
+    #    it into the threadpool so it overlaps with TTS; await it at the very end.
+    log_task = asyncio.create_task(
+        run_in_threadpool(_log_turn, slug, session_id, user_text, result)
+    )
 
     # Speak/display plain text (no markdown symbols read aloud).
     spoken = _strip_markdown(answer)
@@ -505,3 +512,10 @@ async def _handle_utterance(websocket, pipeline, slug, session_id, history,
     await _speak(websocket, spoken, cancel_event, voice)
 
     await websocket.send_json({"type": "done"})
+
+    # The background DB write has almost certainly finished during synthesis;
+    # await it so it can't be orphaned if the connection closes right after.
+    try:
+        await log_task
+    except Exception as e:
+        logger.warning(f"Voice turn logging failed for {slug}: {e}")

@@ -8,8 +8,8 @@ document TEXT is kept in each *_metadata.pkl, so we can rebuild every index
 in place without re-uploading source files.
 
 Usage (from backend/, with venv active):
-    python reindex_collections.py            # re-index all collections
-    python reindex_collections.py client_nexus university_docs   # only these
+    python scripts/reindex_collections.py            # re-index all collections
+    python scripts/reindex_collections.py client_nexus university_docs   # only these
 
 Old .index files are backed up to vector_stores/faiss/_backup_<timestamp>/
 before being overwritten, so you can revert if needed.
@@ -27,6 +27,9 @@ from datetime import datetime
 from pathlib import Path
 
 import faiss
+
+# This script lives in backend/scripts/; add backend/ to the import path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import get_settings
 from services.embeddings import EmbeddingsService

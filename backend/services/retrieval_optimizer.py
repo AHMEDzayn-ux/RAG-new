@@ -20,6 +20,24 @@ from config import get_settings
 
 logger = get_logger(__name__)
 
+# Process-wide cache of loaded CrossEncoder re-rankers, keyed by model name.
+# The re-ranker is identical across every client pipeline, so loading it once
+# and sharing it avoids re-loading the model (and its multi-second startup) for
+# each new client. It's read-only after load, so sharing is safe.
+_RERANKER_CACHE: dict = {}
+
+
+def _get_shared_reranker(rerank_model: str):
+    reranker = _RERANKER_CACHE.get(rerank_model)
+    if reranker is None:
+        from sentence_transformers import CrossEncoder
+        reranker = CrossEncoder(rerank_model)
+        _RERANKER_CACHE[rerank_model] = reranker
+        logger.info(f"Initialized re-ranker: {rerank_model}")
+    else:
+        logger.info(f"Reusing cached re-ranker: {rerank_model}")
+    return reranker
+
 
 class RetrievalOptimizer:
     """
@@ -59,13 +77,11 @@ class RetrievalOptimizer:
         if rerank_model is None:
             rerank_model = get_settings().rerank_model
 
-        # Initialize re-ranker if enabled
+        # Initialize re-ranker if enabled (shared process-wide, see cache above)
         self.reranker = None
         if enable_reranking:
             try:
-                from sentence_transformers import CrossEncoder
-                self.reranker = CrossEncoder(rerank_model)
-                logger.info(f"Initialized re-ranker: {rerank_model}")
+                self.reranker = _get_shared_reranker(rerank_model)
             except Exception as e:
                 logger.error(f"Failed to load re-ranker: {e}")
                 self.enable_reranking = False

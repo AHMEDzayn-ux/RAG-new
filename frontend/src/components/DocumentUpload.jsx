@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { uploadDocument, listDocuments, clearDocuments } from '../services/api';
+import Icon from './Icon';
 import './DocumentUpload.css';
 
 const DocumentUpload = ({ clientId }) => {
@@ -59,16 +60,12 @@ const DocumentUpload = ({ clientId }) => {
             setUploading(true);
             setError('');
             const data = await uploadDocument(clientId, selectedFile);
-            console.log('Upload response:', data);  // Debug logging
-            setSuccess(`✓ Uploaded "${selectedFile.name}" - ${data.chunks_created} chunks created`);
+            setSuccess(`Uploaded “${selectedFile.name}” — ${data.chunks_created} chunks created`);
 
             // Store chunk previews if available
             if (data.chunk_previews && data.chunk_previews.length > 0) {
-                console.log('Chunk previews:', data.chunk_previews.length);  // Debug logging
                 setChunkPreviews(data.chunk_previews);
                 setShowChunks(true);
-            } else {
-                console.log('No chunk previews in response');  // Debug logging
             }
 
             setSelectedFile(null);
@@ -88,7 +85,7 @@ const DocumentUpload = ({ clientId }) => {
         try {
             setLoading(true);
             await clearDocuments(clientId);
-            setSuccess('✓ All documents cleared');
+            setSuccess('All documents cleared');
             await loadDocuments();
             setError('');
         } catch (err) {
@@ -102,7 +99,8 @@ const DocumentUpload = ({ clientId }) => {
         return (
             <div className="document-upload">
                 <div className="no-client-selected">
-                    <h3>📁 Document Upload</h3>
+                    <Icon name="folder" size={30} className="empty-icon" />
+                    <h3>Document upload</h3>
                     <p>Please select a client first to upload documents</p>
                 </div>
             </div>
@@ -111,7 +109,7 @@ const DocumentUpload = ({ clientId }) => {
 
     return (
         <div className="document-upload">
-            <h3>📁 Document Management</h3>
+            <h3><Icon name="folder" size={17} /> Document management</h3>
 
             {error && <div className="error-message">{error}</div>}
             {success && <div className="success-message">{success}</div>}
@@ -138,15 +136,23 @@ const DocumentUpload = ({ clientId }) => {
                 </button>
             </div>
 
+            <div className="upload-hint">
+                <Icon name="info" size={15} className="hint-icon" />
+                <div className="hint-body">
+                    <p><strong>PDF</strong> for manuals, policies &amp; guides — use text-based (not scanned) files. <strong>JSON</strong> for FAQs &amp; catalogs, and it retrieves most accurately.</p>
+                    <p className="hint-muted">Images aren't read (no OCR) and complex tables may lose structure — model important tables as JSON. Keep documents in English for best results.</p>
+                </div>
+            </div>
+
             {showChunks && chunkPreviews.length > 0 && (
                 <div className="chunks-preview-section">
                     <div className="chunks-header">
-                        <h4>📝 Document Chunks Preview ({chunkPreviews.length})</h4>
+                        <h4><Icon name="file" size={15} /> Document chunks preview ({chunkPreviews.length})</h4>
                         <button
                             onClick={() => setShowChunks(false)}
                             className="btn-close-chunks"
                         >
-                            ✕ Close
+                            <Icon name="x" size={14} /> Close
                         </button>
                     </div>
                     <div className="chunks-list">
@@ -199,7 +205,7 @@ const DocumentUpload = ({ clientId }) => {
                     <div className="documents-list">
                         {documents.map((doc, index) => (
                             <div key={index} className="document-item">
-                                <div className="doc-icon">📄</div>
+                                <div className="doc-icon"><Icon name="file" size={18} /></div>
                                 <div className="doc-info">
                                     <span className="doc-name">{doc.text_preview || doc.metadata?.filename || `Document ${index + 1}`}</span>
                                     {doc.metadata?.chunk_count != null && <small>{doc.metadata.chunk_count} chunks</small>}

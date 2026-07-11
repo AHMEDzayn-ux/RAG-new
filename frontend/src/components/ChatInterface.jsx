@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { publicChat, submitFeedback } from '../services/api';
+import Icon from './Icon';
 import './ChatInterface.css';
 
 const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor, sessionId = null }) => {
@@ -266,7 +267,8 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
         return (
             <div className="chat-interface">
                 <div className="no-client-selected">
-                    <h3>💬 Chat Interface</h3>
+                    <Icon name="message" size={32} className="empty-icon" />
+                    <h3>Chat</h3>
                     <p>Please select a client and upload documents to start chatting</p>
                 </div>
             </div>
@@ -276,7 +278,7 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
     return (
         <div className="chat-interface">
             <div className="chat-header">
-                <h3>💬 Chat with Documents</h3>
+                <h3>Conversation</h3>
                 <div className="chat-controls">
                     {/* Voice Controls */}
                     {speechSupported && (
@@ -289,7 +291,7 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                 }}
                                 title={voiceEnabled ? 'Disable voice responses' : 'Enable voice responses'}
                             >
-                                {voiceEnabled ? '🔊' : '🔇'}
+                                <Icon name={voiceEnabled ? 'volume' : 'volume-off'} size={17} />
                             </button>
                             {isSpeaking && (
                                 <button
@@ -297,19 +299,19 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                     onClick={stopSpeaking}
                                     title="Stop speaking"
                                 >
-                                    ⏹️
+                                    <Icon name="stop" size={17} />
                                 </button>
                             )}
                         </div>
                     )}
-                    
+
                     <label className="sources-toggle">
                         <input
                             type="checkbox"
                             checked={showSources}
                             onChange={(e) => setShowSources(e.target.checked)}
                         />
-                        Show Sources
+                        Show sources
                     </label>
                     <button onClick={clearChat} className="btn-clear-chat">
                         Clear
@@ -320,7 +322,8 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
             <div className="chat-messages">
                 {messages.length === 0 ? (
                     <div className="empty-chat">
-                        <p>{greeting || '👋 Start a conversation!'}</p>
+                        <Icon name="message" size={30} className="empty-icon" />
+                        <p>{greeting || 'Start a conversation'}</p>
                         <small>Ask a question to get started</small>
                     </div>
                 ) : (
@@ -329,7 +332,11 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                             <div key={index} className={`message message-${msg.role}`}>
                                 <div className="message-header">
                                     <span className="message-role">
-                                        {msg.role === 'user' ? '👤 You' : msg.role === 'assistant' ? '🤖 Assistant' : '⚠️ Error'}
+                                        <Icon
+                                            name={msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'sparkle' : 'alert'}
+                                            size={15}
+                                        />
+                                        {msg.role === 'user' ? 'You' : msg.role === 'assistant' ? 'Assistant' : 'Error'}
                                     </span>
                                     <span className="message-time">{msg.timestamp}</span>
                                 </div>
@@ -338,7 +345,8 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                         {/* Uncertainty Warning */}
                                         {msg.is_uncertain && (
                                             <div className="uncertainty-warning">
-                                                ⚠️ <strong>Limited Information:</strong> This answer may be incomplete or require human verification.
+                                                <Icon name="alert" size={16} />
+                                                <span><strong>Limited information:</strong> This answer may be incomplete or require human verification.</span>
                                             </div>
                                         )}
 
@@ -377,7 +385,8 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                             className="sources-toggle-btn"
                                             onClick={() => setExpandedSources(prev => ({ ...prev, [index]: !prev[index] }))}
                                         >
-                                            📚 {expandedSources[index] ? 'Hide' : 'View'} Sources ({msg.sources.length})
+                                            <Icon name="book" size={15} />
+                                            {expandedSources[index] ? 'Hide' : 'View'} sources ({msg.sources.length})
                                         </button>
                                         {expandedSources[index] && (
                                             <div className="sources-content">
@@ -395,8 +404,9 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                                         <div className="source-meta">
                                                             {source.source_file && (
                                                                 <span className="source-file">
-                                                                    📄 {source.source_file}
-                                                                    {source.section && ` → ${source.section}`}
+                                                                    <Icon name="file" size={13} />
+                                                                    {source.source_file}
+                                                                    {source.section && ` · ${source.section}`}
                                                                 </span>
                                                             )}
                                                             {source.distance !== undefined && (
@@ -413,22 +423,30 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                 )}
                                 {msg.usedRetrieval !== undefined && (
                                     <small className="retrieval-status">
-                                        {msg.usedRetrieval ? '✓ Used document context' : 'ℹ️ No retrieval'}
+                                        <Icon name={msg.usedRetrieval ? 'check' : 'info'} size={13} />
+                                        {msg.usedRetrieval ? 'Used document context' : 'No retrieval'}
                                     </small>
                                 )}
                                 {msg.escalated && (
-                                    <small className="escalated-badge">🙋 Connected to a human agent</small>
+                                    <small className="escalated-badge">
+                                        <Icon name="users" size={14} />
+                                        Connected to a human agent
+                                    </small>
                                 )}
                                 {msg.role === 'assistant' && msg.interactionId && (
                                     <div className="feedback-row">
                                         {feedbackGiven[index] ? (
-                                            <small className="feedback-thanks">Thanks for your feedback 🙏</small>
+                                            <small className="feedback-thanks">Thanks for your feedback</small>
                                         ) : (
                                             <>
                                                 <button className="fb-btn" title="Helpful"
-                                                    onClick={() => handleFeedback(index, msg.interactionId, 'up')}>👍</button>
+                                                    onClick={() => handleFeedback(index, msg.interactionId, 'up')}>
+                                                    <Icon name="thumbs-up" size={15} />
+                                                </button>
                                                 <button className="fb-btn" title="Not helpful"
-                                                    onClick={() => handleFeedback(index, msg.interactionId, 'down')}>👎</button>
+                                                    onClick={() => handleFeedback(index, msg.interactionId, 'down')}>
+                                                    <Icon name="thumbs-down" size={15} />
+                                                </button>
                                             </>
                                         )}
                                     </div>
@@ -457,19 +475,20 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                         disabled={loading}
                         title={isListening ? 'Stop listening' : 'Start voice input'}
                     >
-                        {isListening ? '🎤' : '🎙️'}
+                        <Icon name={isListening ? 'mic' : 'mic-off'} size={18} />
                     </button>
                 )}
                 <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder={isListening ? "Listening..." : "Type your question here..."}
+                    placeholder={isListening ? "Listening…" : "Type your question…"}
                     disabled={loading}
                     rows="2"
                 />
-                <button onClick={handleSend} disabled={!input.trim() || loading}>
-                    {loading ? '⏳' : '📤'} Send
+                <button className="btn-send" onClick={handleSend} disabled={!input.trim() || loading}>
+                    {loading ? <span className="btn-spinner" aria-hidden="true" /> : <Icon name="send" size={17} />}
+                    <span>Send</span>
                 </button>
             </div>
         </div>

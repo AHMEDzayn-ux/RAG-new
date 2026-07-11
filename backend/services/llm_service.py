@@ -293,6 +293,7 @@ class LLMService:
 • Break long content into SHORT paragraphs (2-3 sentences max)
 • Add line breaks between different topics/sections
 • Make it visually appealing and easy to read at a glance
+• Do NOT use emojis (they get read aloud in voice mode) — use plain text
 
 Examples:
 

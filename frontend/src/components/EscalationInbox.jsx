@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { listEscalations, resolveEscalation } from '../services/api';
+import Icon from './Icon';
 
-const EMOTION_ICON = {
-    angry: '😠', frustrated: '😤', confused: '😕', happy: '😊', neutral: '💬',
+// Mood → dot color, so operators can scan sentiment without emoji.
+const EMOTION_COLOR = {
+    angry: '#dc2626', frustrated: '#ea580c', confused: '#ca8a04',
+    happy: '#059669', neutral: '#94a3b8',
 };
 
 const EscalationInbox = ({ slug }) => {
@@ -40,7 +43,7 @@ const EscalationInbox = ({ slug }) => {
     return (
         <div className="inbox">
             <div className="inbox-head">
-                <h3>📨 Escalations {openCount > 0 && <span className="inbox-badge">{openCount} open</span>}</h3>
+                <h3><Icon name="inbox" size={17} /> Escalations {openCount > 0 && <span className="inbox-badge">{openCount} open</span>}</h3>
                 <button className="btn-mini" onClick={load}>Refresh</button>
             </div>
 
@@ -51,7 +54,10 @@ const EscalationInbox = ({ slug }) => {
                     {items.map((e) => (
                         <div key={e.id} className={`inbox-item ${e.status}`}>
                             <div className="inbox-item-head">
-                                <span className="inbox-emotion">{EMOTION_ICON[e.emotion] || '💬'} {e.emotion || 'neutral'}{e.intensity ? ` (${e.intensity}/5)` : ''}</span>
+                                <span className="inbox-emotion">
+                                    <span className="emotion-dot" style={{ background: EMOTION_COLOR[e.emotion] || EMOTION_COLOR.neutral }} />
+                                    {e.emotion || 'neutral'}{e.intensity ? ` · ${e.intensity}/5` : ''}
+                                </span>
                                 <span className={`inbox-status status-${e.status}`}>{e.status}</span>
                                 <span className="inbox-time">{e.created_at ? new Date(e.created_at).toLocaleString() : ''}</span>
                             </div>

@@ -10,16 +10,19 @@ import VoiceCall from '../components/VoiceCall';
 import EscalationInbox from '../components/EscalationInbox';
 import RequestsInbox from '../components/RequestsInbox';
 import InsightsPanel from '../components/InsightsPanel';
+import PortalAdmins from '../components/PortalAdmins';
+import Icon from '../components/Icon';
 import './AdminConsole.css';
 
 const TABS = [
-    { key: 'knowledge', label: '📚 Knowledge' },
-    { key: 'insights', label: '📊 Insights' },
-    { key: 'inbox', label: '📨 Inbox' },
-    { key: 'requests', label: '🎫 Requests' },
-    { key: 'deploy', label: '🚀 Deploy' },
-    { key: 'whatsapp', label: '💬 WhatsApp' },
-    { key: 'test', label: '🧪 Test Chat' },
+    { key: 'knowledge', label: 'Knowledge', icon: 'book' },
+    { key: 'insights', label: 'Insights', icon: 'chart' },
+    { key: 'inbox', label: 'Inbox', icon: 'inbox' },
+    { key: 'requests', label: 'Requests', icon: 'ticket' },
+    { key: 'admins', label: 'Admin logins', icon: 'user' },
+    { key: 'deploy', label: 'Deploy', icon: 'link' },
+    { key: 'whatsapp', label: 'WhatsApp', icon: 'message' },
+    { key: 'test', label: 'Test chat', icon: 'sparkle' },
 ];
 
 const AdminConsole = () => {
@@ -41,11 +44,17 @@ const AdminConsole = () => {
     return (
         <div className="console">
             <header className="console-header">
-                <div>
-                    <h1>🤖 Operator Console</h1>
-                    <p>Configure and deploy AI customer-care assistants for your clients.</p>
+                <div className="console-title">
+                    <span className="console-logo" aria-hidden="true"><Icon name="sparkle" size={20} /></span>
+                    <div>
+                        <h1>Operator Console</h1>
+                        <p>Configure and deploy AI customer-care assistants for your clients.</p>
+                    </div>
                 </div>
-                <button className="btn-logout" onClick={handleLogout}>Sign out</button>
+                <button className="btn-logout" onClick={handleLogout}>
+                    <Icon name="logout" size={15} />
+                    Sign out
+                </button>
             </header>
 
             <main className="console-main">
@@ -59,7 +68,8 @@ const AdminConsole = () => {
                 <section className="console-right">
                     {!selectedClient ? (
                         <div className="console-placeholder">
-                            <h2>👈 Select or create a client</h2>
+                            <Icon name="arrow-left" size={26} />
+                            <h2>Select or create a client</h2>
                             <p>Pick a client to upload its knowledge base, configure WhatsApp, grab its deploy links, and test the assistant.</p>
                         </div>
                     ) : (
@@ -71,6 +81,7 @@ const AdminConsole = () => {
                                         <button key={t.key}
                                             className={`tab-btn ${tab === t.key ? 'active' : ''}`}
                                             onClick={() => setTab(t.key)}>
+                                            <Icon name={t.icon} size={15} />
                                             {t.label}
                                         </button>
                                     ))}
@@ -82,15 +93,16 @@ const AdminConsole = () => {
                                 {tab === 'insights' && <InsightsPanel slug={selectedClient} />}
                                 {tab === 'inbox' && <EscalationInbox slug={selectedClient} />}
                                 {tab === 'requests' && <RequestsInbox slug={selectedClient} />}
+                                {tab === 'admins' && <PortalAdmins slug={selectedClient} />}
                                 {tab === 'deploy' && <DeployPanel slug={selectedClient} />}
                                 {tab === 'whatsapp' && <WhatsAppConfig slug={selectedClient} />}
                                 {tab === 'test' && (
                                     <div>
                                         <div className="test-mode-row">
                                             <button className={`tab-btn ${!testVoice ? 'active' : ''}`}
-                                                onClick={() => setTestVoice(false)}>💬 Text</button>
+                                                onClick={() => setTestVoice(false)}><Icon name="message" size={15} /> Text</button>
                                             <button className={`tab-btn ${testVoice ? 'active' : ''}`}
-                                                onClick={() => setTestVoice(true)}>🎙️ Voice</button>
+                                                onClick={() => setTestVoice(true)}><Icon name="mic" size={15} /> Voice</button>
                                         </div>
                                         {testVoice ? (
                                             <VoiceCall key={selectedClient} slug={selectedClient}

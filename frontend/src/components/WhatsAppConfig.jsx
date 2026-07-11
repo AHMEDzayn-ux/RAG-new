@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getClient, updateClient } from '../services/api';
+import Icon from './Icon';
 
 const WhatsAppConfig = ({ slug }) => {
     const [cfg, setCfg] = useState({ wa_enabled: false, wa_phone_number_id: '', wa_access_token: '' });
@@ -28,7 +29,7 @@ const WhatsAppConfig = ({ slug }) => {
             // Only send the token if the operator entered a new one.
             if (cfg.wa_access_token) payload.wa_access_token = cfg.wa_access_token;
             await updateClient(slug, payload);
-            setStatus('Saved ✓');
+            setStatus('Saved');
         } catch (err) {
             setStatus('Save failed: ' + (err?.response?.data?.detail || err.message));
         } finally {
@@ -38,7 +39,7 @@ const WhatsAppConfig = ({ slug }) => {
 
     return (
         <form className="wa-config" onSubmit={save}>
-            <h3>💬 WhatsApp</h3>
+            <h3><Icon name="message" size={17} /> WhatsApp</h3>
             <p className="hint">Route this client's WhatsApp number to this assistant. One webhook serves all clients; messages are matched by phone-number ID.</p>
             <label className="checkbox">
                 <input type="checkbox" checked={cfg.wa_enabled}

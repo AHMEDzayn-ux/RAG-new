@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { publicGetConfig } from '../services/api';
 import ChatInterface from '../components/ChatInterface';
 import VoiceCall from '../components/VoiceCall';
+import Icon from '../components/Icon';
 import './CustomerApp.css';
 
 // Persistent per-browser conversation id so a customer's turns group together.
@@ -34,26 +35,46 @@ const CustomerApp = () => {
         return <div className="customer-status">Loading…</div>;
     }
     if (error === 'notfound') {
-        return <div className="customer-status">🔍 Assistant not found.</div>;
+        return (
+            <div className="customer-status">
+                <Icon name="search" size={28} className="customer-status-icon" />
+                <span>Assistant not found.</span>
+            </div>
+        );
     }
     if (error) {
-        return <div className="customer-status">⚠️ Something went wrong. Please try again later.</div>;
+        return (
+            <div className="customer-status">
+                <Icon name="alert" size={28} className="customer-status-icon" />
+                <span>Something went wrong. Please try again later.</span>
+            </div>
+        );
     }
 
     const accent = config.accent_color || '#4f46e5';
 
     return (
         <div className="customer-app" style={{ '--accent': accent }}>
-            <header className="customer-header" style={{ background: accent }}>
-                <h1>{config.bot_name || config.name}</h1>
-                <p>{config.name}</p>
-                <button
-                    className="voice-toggle-btn"
-                    onClick={() => setVoiceOpen((v) => !v)}
-                    title={voiceOpen ? 'Back to chat' : 'Talk to the assistant'}
-                >
-                    {voiceOpen ? '💬 Chat' : '🎙️ Talk'}
-                </button>
+            <header className="customer-header">
+                <div className="customer-header-inner">
+                    <div className="customer-brand">
+                        <span className="customer-avatar" aria-hidden="true">
+                            <Icon name="sparkle" size={20} />
+                        </span>
+                        <div className="customer-brand-text">
+                            <h1>{config.bot_name || config.name}</h1>
+                            <p>{config.name}</p>
+                        </div>
+                    </div>
+                    <button
+                        className="voice-toggle-btn"
+                        onClick={() => setVoiceOpen((v) => !v)}
+                        title={voiceOpen ? 'Back to chat' : 'Talk to the assistant'}
+                    >
+                        <Icon name={voiceOpen ? 'message' : 'mic'} size={16} />
+                        {voiceOpen ? 'Chat' : 'Talk'}
+                    </button>
+                </div>
             </header>
             <div className="customer-chat">
                 {voiceOpen ? (

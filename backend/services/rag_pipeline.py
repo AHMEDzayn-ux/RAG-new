@@ -4,6 +4,7 @@ Orchestrates the complete RAG workflow: document processing, retrieval, and gene
 """
 
 import logging
+from datetime import datetime
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
@@ -32,26 +33,6 @@ class RAGPipeline:
     3. Vector storage and retrieval
     4. LLM-based response generation
     """
-    
-    # Query intent patterns to filter by section
-    QUERY_SECTION_MAP = {
-        "work_experience": [
-            r"(?i)(work\s+experience|job|employment|professional\s+experience|career)",
-            r"(?i)(jobs\s+done|worked\s+as|working\s+at)"
-        ],
-        "education": [
-            r"(?i)(education|degree|university|college|academic|studied|student)"
-        ],
-        "skills": [
-            r"(?i)(skills|technical|competencies|expertise|proficient)"
-        ],
-        "volunteer": [
-            r"(?i)(volunteer|extracurricular|organizing|committee|leadership\s+role)"
-        ],
-        "projects": [
-            r"(?i)(projects|portfolio|built|developed)"
-        ]
-    }
     
     def __init__(
         self,
@@ -262,6 +243,8 @@ class RAGPipeline:
         """Lean agent prompt: persona + genuine capability boundaries (no case-patches)."""
         return f"""You are {self.system_role}
 
+Today's date is {datetime.now():%Y-%m-%d}. Resolve any relative date the customer gives ("yesterday", "10th of July", "last Monday") against this before calling a tool that takes a date.
+
 🌐 LANGUAGE (very important):
 - Reply in the customer's language. If their latest message is in Sinhala script (සිංහල) or in romanized Sinhala ("Singlish", e.g. "mata plan eka gana danaganna oney"), reply in natural, fluent Sinhala script. If it is in Tamil script (தமிழ்) or romanized Tamil, reply in natural, fluent Tamil script. If it is in English, reply in English. Never switch the language on the customer.
 - BUT always write your search_knowledge_base queries in ENGLISH — the knowledge base is in English. Translate the customer's need into a focused English query, even when the conversation is in Sinhala or Tamil. Then answer them back in their own language.
@@ -270,12 +253,13 @@ You are a customer-care agent. Operate by these principles:
 
 - Use the search_knowledge_base tool for ANY question about products, plans, prices, policies, features, coverage, or how to do something ("how do I…", "can I…", "what is…"). When unsure whether we cover it, SEARCH FIRST rather than giving generic advice. Base every factual claim ONLY on what the tool returns.
 - If a search returns no relevant information, tell the customer you don't have that detail and offer to connect them to a human. NEVER invent prices, policies, or facts.
-- You have action tools to actually HELP: log tickets/requests, schedule callbacks, check the status of an existing ticket/request by its reference number, look up an account, and make account changes. Use them when the customer wants something done — including checking progress of something already logged. Collect the details a tool needs (ask for anything missing) before calling it. When a tool returns a reference number, give it to the customer.
+- You have action tools to actually HELP — you are not limited to a fixed script. Use whichever tool fits what the customer is asking: look up an account, check call/usage history, check billing/ledger/invoices, check activation history, list or check tickets, log a new ticket, request a callback, change plan, activate a package, recharge balance, suspend/reactivate a line, or update contact details. If a customer's request maps to a tool, call it rather than saying you can't help — don't guess the answer yourself. Collect the details a tool needs (ask for anything missing) before calling it. When a tool returns a reference number, give it to the customer.
 - You can look up or change an account ONLY through the account tools, and ONLY when the customer provides an identifier (phone number / email / account or application ID). NEVER invent, assume, or guess account details — if you don't have the tool result, you don't know it. Before making any CHANGE to an account, state the exact change and get the customer's clear confirmation ("yes") first.
 - For greetings, thanks, or small talk, reply warmly and briefly — do NOT search or call tools.
 - If the customer reports a vague problem ("it's not working", "I have an issue"), ask what specifically is wrong (calls, data, texts?) BEFORE troubleshooting — don't guess.
 - Answer ONLY what was asked. Be concise: lead with the key points, then offer more. Don't dump unrelated details.
-- Be warm, confident, and human. Use short paragraphs and bullet points (•) when listing."""
+- Be warm, confident, and human. Use short paragraphs and bullet points (•) when listing.
+- Do NOT use emojis in your replies — they get read aloud in voice mode. Use plain text only."""
 
     # Tool schema exposed to the model (OpenAI function-calling format).
     _AGENT_TOOLS = [{
@@ -1074,23 +1058,6 @@ You are a customer-care agent. Operate by these principles:
         
         return response
     
-    def _detect_query_section(self, query: str) -> Optional[str]:
-        """
-        Detect which CV section the query is asking about.
-        
-        Args:
-            query: User's question
-            
-        Returns:
-            Section name or None if no specific section detected
-        """
-        import re
-        for section, patterns in self.QUERY_SECTION_MAP.items():
-            for pattern in patterns:
-                if re.search(pattern, query):
-                    return section
-        return None
-    
     def _expand_query_with_history(self, query: str, conversation_history: List[Dict[str, str]]) -> str:
         """
         Expand queries containing pronouns or vague references by incorporating context from recent conversation.
@@ -1171,24 +1138,6 @@ You are a customer-care agent. Operate by these principles:
             return expanded
         
         return query
-    
-    def _filter_by_section(self, documents: List[Dict[str, Any]], section: str) -> List[Dict[str, Any]]:
-        """
-        Filter documents by section metadata.
-        
-        Args:
-            documents: List of retrieved documents
-            section: Target section name
-            
-        Returns:
-            Filtered list of documents from the target section
-        """
-        filtered = []
-        for doc in documents:
-            doc_section = doc.get('metadata', {}).get('section')
-            if doc_section == section:
-                filtered.append(doc)
-        return filtered
     
     def _retrieve_parent_chunks(self, child_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

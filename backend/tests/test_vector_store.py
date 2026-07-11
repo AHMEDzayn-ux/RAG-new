@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 import numpy as np
 
-from services.vector_store_faiss import VectorStoreService
+from services.vector_store import VectorStoreService
 
 
 @pytest.fixture

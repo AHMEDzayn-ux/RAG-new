@@ -15,3 +15,22 @@ services:
         value: INFO
       - key: GROQ_API_KEY
         sync: false # You'll add this manually in Render dashboard
+      - key: GOOGLE_API_KEY
+        sync: false # Gemini is the default LLM/TTS/STT provider - add manually in Render dashboard
+      - key: JWT_SECRET
+        sync: false # Generate a random 32+ byte value - add manually in Render dashboard
+
+  - type: web
+    name: rag-frontend
+    runtime: static
+    branch: main
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://rag-backend.onrender.com # Update to the backend's actual assigned URL after its first deploy, then redeploy this service
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

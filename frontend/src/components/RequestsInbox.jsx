@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { getRequests, setRequestStatus, getAccounts, seedAccounts } from '../services/api';
+import Icon from './Icon';
 
 const KIND_ICON = {
-    ticket: '🎫', callback: '📞', account_change: '🔁', account_lookup: '🔍',
+    ticket: 'ticket', callback: 'phone', account_change: 'refresh', account_lookup: 'search',
 };
 
 const RequestsInbox = ({ slug }) => {
@@ -54,7 +55,7 @@ const RequestsInbox = ({ slug }) => {
     return (
         <div className="inbox">
             <div className="inbox-head">
-                <h3>🎫 Requests {openCount > 0 && <span className="inbox-badge">{openCount} open</span>}</h3>
+                <h3><Icon name="ticket" size={17} /> Requests {openCount > 0 && <span className="inbox-badge">{openCount} open</span>}</h3>
                 <button className="btn-mini" onClick={load}>Refresh</button>
             </div>
 
@@ -65,7 +66,7 @@ const RequestsInbox = ({ slug }) => {
                     {items.map((a) => (
                         <div key={a.id} className={`inbox-item ${a.status === 'done' ? 'resolved' : ''}`}>
                             <div className="inbox-item-head">
-                                <span className="inbox-emotion">{KIND_ICON[a.kind] || '⚙️'} {a.action_type}</span>
+                                <span className="inbox-emotion"><Icon name={KIND_ICON[a.kind] || 'settings'} size={14} /> {a.action_type}</span>
                                 {a.reference && <span className="req-ref">{a.reference}</span>}
                                 <span className={`inbox-status status-${a.status === 'done' ? 'resolved' : 'open'}`}>{a.status}</span>
                                 <span className="inbox-time">{a.created_at ? new Date(a.created_at).toLocaleString() : ''}</span>
@@ -77,7 +78,7 @@ const RequestsInbox = ({ slug }) => {
                                     ))}
                                 </div>
                             )}
-                            {a.result && <div className="inbox-summary">→ {a.result}</div>}
+                            {a.result && <div className="inbox-summary">{a.result}</div>}
                             <div className="inbox-actions">
                                 {a.status === 'open'
                                     ? <button className="btn-mini resolve" onClick={() => handleStatus(a.id, 'done')}>Mark done</button>
@@ -89,7 +90,7 @@ const RequestsInbox = ({ slug }) => {
             )}
 
             <div className="insights-block">
-                <h4>🧪 Mock accounts <span className="hint">(demo data the agent can look up / change)</span></h4>
+                <h4><Icon name="briefcase" size={15} /> Mock accounts <span className="hint">(demo data the agent can look up / change)</span></h4>
                 {accounts.length === 0 ? (
                     <p className="empty-state" style={{ marginBottom: 10 }}>No demo accounts yet.</p>
                 ) : (

@@ -194,7 +194,9 @@ class VectorStoreService:
                     query_docs.append(collection['documents'][idx])
                     query_metas.append(metadata)
                     query_ids.append(collection['ids'][idx])
-                    query_dists.append(distances[i][j])
+                    # Cast to native float — numpy float32 isn't JSON-serializable
+                    # and downstream callers/tests expect Python floats.
+                    query_dists.append(float(distances[i][j]))
                     
                     # Stop once we have enough results
                     if len(query_docs) >= n_results:

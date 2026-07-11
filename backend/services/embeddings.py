@@ -12,6 +12,27 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
+# Process-wide cache of loaded SentenceTransformer models, keyed by
+# (model_name, device). The embedding model is identical across every client
+# pipeline, so loading one copy and sharing it avoids re-loading ~90MB (and the
+# multi-second load) for each new client — a real cold-start + memory win. The
+# models are read-only after load and torch releases the GIL during encode(),
+# so sharing across the request threadpool is safe.
+_MODEL_CACHE: dict = {}
+
+
+def _get_shared_model(model_name: str, device: Optional[str]) -> "SentenceTransformer":
+    key = (model_name, device)
+    model = _MODEL_CACHE.get(key)
+    if model is None:
+        logger.info(f"Loading embedding model: {model_name}")
+        model = SentenceTransformer(model_name, device=device)
+        _MODEL_CACHE[key] = model
+        logger.info("Embedding model loaded and cached for reuse")
+    else:
+        logger.info(f"Reusing cached embedding model: {model_name}")
+    return model
+
 
 class EmbeddingsService:
     """
@@ -39,12 +60,11 @@ class EmbeddingsService:
             device: Device to run model on ('cpu', 'cuda', or None for auto)
         """
         self.model_name = model_name
-        
-        logger.info(f"Loading embedding model: {model_name}")
+
         try:
-            self.model = SentenceTransformer(model_name, device=device)
+            self.model = _get_shared_model(model_name, device)
             self.dimension = self.model.get_sentence_embedding_dimension()
-            logger.info(f"Model loaded successfully. Embedding dimension: {self.dimension}")
+            logger.info(f"Embedding dimension: {self.dimension}")
         except Exception as e:
             logger.error(f"Failed to load embedding model: {str(e)}")
             raise

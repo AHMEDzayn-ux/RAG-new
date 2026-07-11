@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { API_BASE } from '../services/api';
+import Icon from './Icon';
 
 const DeployPanel = ({ slug }) => {
     const [copied, setCopied] = useState('');
@@ -18,7 +19,7 @@ const DeployPanel = ({ slug }) => {
 
     return (
         <div className="deploy-panel">
-            <h3>🚀 Deploy — give these to your client</h3>
+            <h3>Deploy — give these to your client</h3>
 
             <div className="deploy-item">
                 <label>Hosted chat page</label>
@@ -26,7 +27,8 @@ const DeployPanel = ({ slug }) => {
                     <code>{customerUrl}</code>
                     <a href={customerUrl} target="_blank" rel="noreferrer" className="btn-mini">Open</a>
                     <button className="btn-mini" onClick={() => copy(customerUrl, 'url')}>
-                        {copied === 'url' ? '✓' : 'Copy'}
+                        <Icon name={copied === 'url' ? 'check' : 'copy'} size={14} />
+                        {copied === 'url' ? 'Copied' : 'Copy'}
                     </button>
                 </div>
             </div>
@@ -36,7 +38,8 @@ const DeployPanel = ({ slug }) => {
                 <div className="deploy-row">
                     <code className="snippet">{widgetSnippet}</code>
                     <button className="btn-mini" onClick={() => copy(widgetSnippet, 'widget')}>
-                        {copied === 'widget' ? '✓' : 'Copy'}
+                        <Icon name={copied === 'widget' ? 'check' : 'copy'} size={14} />
+                        {copied === 'widget' ? 'Copied' : 'Copy'}
                     </button>
                 </div>
             </div>

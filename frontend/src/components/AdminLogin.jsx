@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { adminLogin, adminRegister } from '../services/api';
+import Icon from './Icon';
 
 const AdminLogin = ({ onLogin }) => {
     const [mode, setMode] = useState('login'); // login | register
@@ -32,7 +33,8 @@ const AdminLogin = ({ onLogin }) => {
     return (
         <div className="login-wrap">
             <form className="login-card" onSubmit={handleSubmit}>
-                <h1>🔐 Operator Console</h1>
+                <span className="login-brand" aria-hidden="true"><Icon name="lock" size={22} /></span>
+                <h1>Operator Console</h1>
                 <p>{isRegister ? 'Create an account to manage your assistants.' : 'Sign in to manage your assistants.'}</p>
                 {isRegister && (
                     <input
@@ -66,6 +68,15 @@ const AdminLogin = ({ onLogin }) => {
                 >
                     {isRegister ? 'Have an account? Sign in' : 'New here? Create an account'}
                 </button>
+                {import.meta.env.DEV && !isRegister && (
+                    <button
+                        type="button"
+                        className="login-switch"
+                        onClick={() => { setEmail('admin@local'); setPassword('Ruzaini@123'); setError(''); }}
+                    >
+                        Autofill demo login
+                    </button>
+                )}
             </form>
         </div>
     );

@@ -95,3 +95,6 @@ build/
 tmp/
 temp/
 *.tmp
+
+# Demo credentials (plaintext passwords, local/demo only)
+docs/DEMO_LOGINS.md

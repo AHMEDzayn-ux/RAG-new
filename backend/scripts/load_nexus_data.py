@@ -11,12 +11,12 @@ Usage:
 import sys
 from pathlib import Path
 
-# Add backend to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add backend/ (this script lives in backend/scripts/) to the import path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from services.document_loader import DocumentLoader
 from services.embeddings import EmbeddingsService
-from services.vector_store_faiss import VectorStoreService
+from services.vector_store import VectorStoreService
 from logger import get_logger
 import json
 

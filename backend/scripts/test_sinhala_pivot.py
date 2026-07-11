@@ -7,6 +7,9 @@ import sentence_transformers  # noqa: F401  (import torch before faiss; see main
 import io, sys
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # backend/ on path
+
 from services.rag_pipeline import RAGPipeline
 from config import get_settings
 

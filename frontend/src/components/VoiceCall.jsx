@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { WS_BASE } from '../services/api';
+import Icon from './Icon';
 import './VoiceCall.css';
 
 /**
@@ -389,7 +390,7 @@ const VoiceCall = ({ slug, accentColor = '#4f46e5', onClose }) => {
                 <div className="orb-ring r1" />
                 <div className="orb-ring r2" />
                 <div className="orb-ring r3" />
-                <span className="orb-emoji">{status === 'speaking' ? '🔊' : '🎤'}</span>
+                <span className="orb-glyph"><Icon name={status === 'speaking' ? 'volume' : 'mic'} size={32} strokeWidth={1.6} /></span>
             </div>
 
             <div className="voice-status">{statusLabel}</div>
@@ -398,9 +399,24 @@ const VoiceCall = ({ slug, accentColor = '#4f46e5', onClose }) => {
                     <div className="mic-meter-fill" style={{ width: `${micLevel}%` }} />
                 </div>
             )}
-            {micMuted && <div className="voice-error">🎤 Your microphone looks muted — check your mic-mute key or OS sound settings.</div>}
-            {escalated && <div className="voice-escalated">🤝 Connecting you to a human agent</div>}
-            {error && <div className="voice-error">⚠️ {error}</div>}
+            {micMuted && (
+                <div className="voice-error">
+                    <Icon name="mic-off" size={15} />
+                    <span>Your microphone looks muted — check your mic-mute key or OS sound settings.</span>
+                </div>
+            )}
+            {escalated && (
+                <div className="voice-escalated">
+                    <Icon name="users" size={14} />
+                    Connecting you to a human agent
+                </div>
+            )}
+            {error && (
+                <div className="voice-error">
+                    <Icon name="alert" size={15} />
+                    <span>{error}</span>
+                </div>
+            )}
 
             <div className="voice-transcript">
                 {lines.map((l, i) => (
@@ -438,7 +454,10 @@ const VoiceCall = ({ slug, accentColor = '#4f46e5', onClose }) => {
                 </div>
             )}
 
-            <button className="voice-end" onClick={onClose}>✕ End call</button>
+            <button className="voice-end" onClick={onClose}>
+                <Icon name="phone" size={16} />
+                End call
+            </button>
         </div>
     );
 };

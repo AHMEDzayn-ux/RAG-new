@@ -231,7 +231,7 @@ def verify_cors_config(root_dir: Path) -> bool:
 
 def main():
     """Run full security audit."""
-    root_dir = Path(__file__).parent
+    root_dir = Path(__file__).resolve().parents[1]
     
     print("\n" + "🛡️  " * 20)
     print("       RAG SYSTEM SECURITY AUDIT")

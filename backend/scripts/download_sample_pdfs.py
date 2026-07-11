@@ -10,7 +10,7 @@ from pathlib import Path
 def download_pdfs():
     """Download sample PDF files"""
     
-    documents_dir = Path("../documents")
+    documents_dir = Path(__file__).resolve().parents[2] / "documents"
     documents_dir.mkdir(exist_ok=True)
     
     pdfs = [

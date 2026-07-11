@@ -15,6 +15,7 @@ from api.models import (
 )
 from api.clients import get_pipeline_manager
 from services import client_store
+from services.text_utils import strip_emojis
 from database import get_db
 from logger import get_logger
 
@@ -33,7 +34,7 @@ async def public_config(slug: str, db: Session = Depends(get_db)):
         slug=client.slug,
         name=client.name,
         bot_name=client.bot_name,
-        greeting=client.greeting or "Hi! How can I help you today?",
+        greeting=strip_emojis(client.greeting) or "Hi! How can I help you today?",
         accent_color=client.accent_color,
         domain=client.domain,
     )
