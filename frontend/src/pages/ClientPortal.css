@@ -269,6 +269,10 @@ table.portal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
 .portal-login-demo:hover { color: var(--accent); border-color: var(--accent); }
+a.portal-login-demo {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    text-decoration: none; box-sizing: border-box;
+}
 
 @media (max-width: 640px) {
     .portal-main { padding: 16px 12px; }

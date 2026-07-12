@@ -13,9 +13,9 @@ function App() {
             <Route path="/portal/:slug" element={<ClientPortal />} />
             {/* Customer-facing assistant, scoped to a single client slug */}
             <Route path="/c/:slug" element={<CustomerApp />} />
-            {/* Default: send to the console */}
-            <Route path="/" element={<Navigate to="/admin" replace />} />
-            <Route path="*" element={<Navigate to="/admin" replace />} />
+            {/* Default: send to the Nexus staff portal (superadmin can still reach /admin directly) */}
+            <Route path="/" element={<Navigate to="/portal/nexus" replace />} />
+            <Route path="*" element={<Navigate to="/portal/nexus" replace />} />
         </Routes>
     );
 }

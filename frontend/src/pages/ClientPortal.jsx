@@ -82,6 +82,9 @@ const PortalLogin = ({ slug, brand, onLogin }) => {
                 <div className="portal-login-note">
                     Access is issued by your platform operator. This portal shows only {slug}'s data.
                 </div>
+                <a className="portal-login-demo" href={`/c/${slug}`} target="_blank" rel="noopener noreferrer">
+                    <Icon name="phone-call" size={14} /> Test the chatbot →
+                </a>
             </form>
         </div>
     );
@@ -158,6 +161,9 @@ const ClientPortal = () => {
                         <strong>{me?.name || me?.email}</strong>
                         <span>{me?.is_superadmin ? 'Operator (superadmin)' : 'Client admin'}</span>
                     </div>
+                    <a className="btn btn-sm" href={`/c/${slug}`} target="_blank" rel="noopener noreferrer">
+                        <Icon name="phone-call" size={14} /> Test chatbot
+                    </a>
                     <button className="btn btn-sm" onClick={signOut}>
                         <Icon name="logout" size={14} /> Sign out
                     </button>
