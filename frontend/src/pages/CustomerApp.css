@@ -35,6 +35,7 @@
 }
 
 .customer-avatar {
+    position: relative;
     display: grid;
     place-items: center;
     width: 40px;
@@ -43,6 +44,16 @@
     background: var(--accent);
     color: var(--on-accent);
     flex-shrink: 0;
+}
+.customer-avatar-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--success);
+    border: 2px solid var(--surface);
 }
 
 .customer-brand-text { min-width: 0; }

@@ -31,6 +31,12 @@ const CustomerApp = () => {
             .finally(() => setLoading(false));
     }, [slug]);
 
+    useEffect(() => {
+        const label = config?.bot_name || config?.name;
+        document.title = label ? `${label} — Customer Care` : 'Nexus Customer Care';
+        return () => { document.title = 'Nexus Customer Care'; };
+    }, [config]);
+
     if (loading) {
         return <div className="customer-status">Loading…</div>;
     }
@@ -60,6 +66,7 @@ const CustomerApp = () => {
                     <div className="customer-brand">
                         <span className="customer-avatar" aria-hidden="true">
                             <Icon name="sparkle" size={20} />
+                            <span className="customer-avatar-dot" />
                         </span>
                         <div className="customer-brand-text">
                             <h1>{config.bot_name || config.name}</h1>
@@ -83,6 +90,8 @@ const CustomerApp = () => {
                     <ChatInterface
                         clientId={slug}
                         isPublic
+                        debug={false}
+                        botName={config.bot_name || config.name}
                         greeting={config.greeting}
                         accentColor={accent}
                         sessionId={getSessionId(slug)}

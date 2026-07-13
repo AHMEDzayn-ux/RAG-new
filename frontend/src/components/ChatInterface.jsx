@@ -4,7 +4,7 @@ import { publicChat, submitFeedback } from '../services/api';
 import Icon from './Icon';
 import './ChatInterface.css';
 
-const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor, sessionId = null }) => {
+const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor, sessionId = null, botName = '', debug = true }) => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -278,10 +278,17 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
     return (
         <div className="chat-interface">
             <div className="chat-header">
-                <h3>Conversation</h3>
+                {debug ? (
+                    <h3>Conversation</h3>
+                ) : (
+                    <div className="chat-status">
+                        <span className="status-dot" aria-hidden="true" />
+                        Online now
+                    </div>
+                )}
                 <div className="chat-controls">
-                    {/* Voice Controls */}
-                    {speechSupported && (
+                    {/* Voice Controls (dev quick-test only — customers use the dedicated Talk mode) */}
+                    {speechSupported && debug && (
                         <div className="voice-controls">
                             <button
                                 className={`btn-voice-toggle ${voiceEnabled ? 'active' : ''}`}
@@ -305,16 +312,19 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                         </div>
                     )}
 
-                    <label className="sources-toggle">
-                        <input
-                            type="checkbox"
-                            checked={showSources}
-                            onChange={(e) => setShowSources(e.target.checked)}
-                        />
-                        Show sources
-                    </label>
-                    <button onClick={clearChat} className="btn-clear-chat">
-                        Clear
+                    {debug && (
+                        <label className="sources-toggle">
+                            <input
+                                type="checkbox"
+                                checked={showSources}
+                                onChange={(e) => setShowSources(e.target.checked)}
+                            />
+                            Show sources
+                        </label>
+                    )}
+                    <button onClick={clearChat} className="btn-clear-chat" title="Start a new conversation">
+                        <Icon name="refresh" size={14} />
+                        {debug ? 'Clear' : 'New chat'}
                     </button>
                 </div>
             </div>
@@ -336,7 +346,7 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                             name={msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'sparkle' : 'alert'}
                                             size={15}
                                         />
-                                        {msg.role === 'user' ? 'You' : msg.role === 'assistant' ? 'Assistant' : 'Error'}
+                                        {msg.role === 'user' ? 'You' : msg.role === 'assistant' ? (botName || 'Assistant') : 'Error'}
                                     </span>
                                     <span className="message-time">{msg.timestamp}</span>
                                 </div>
@@ -350,8 +360,8 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                             </div>
                                         )}
 
-                                        {/* Confidence Indicator - only show if confidence is meaningful */}
-                                        {msg.confidence > 0 && msg.confidence < 1 && !msg.is_uncertain && (
+                                        {/* Confidence Indicator - dev/operator diagnostic, not customer-facing */}
+                                        {debug && msg.confidence > 0 && msg.confidence < 1 && !msg.is_uncertain && (
                                             <div className={`confidence-indicator confidence-${msg.confidence >= 0.7 ? 'high' : msg.confidence >= 0.5 ? 'medium' : 'low'}`}>
                                                 <span className="confidence-label">Confidence:</span>
                                                 <div className="confidence-bar">
@@ -379,7 +389,7 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                     </>
                                 )}
                                 {msg.role !== 'assistant' && <div className="message-content">{msg.content}</div>}
-                                {msg.sources && msg.sources.length > 0 && showSources && (
+                                {debug && msg.sources && msg.sources.length > 0 && showSources && (
                                     <div className="message-sources">
                                         <button
                                             className="sources-toggle-btn"
@@ -421,7 +431,7 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                                         )}
                                     </div>
                                 )}
-                                {msg.usedRetrieval !== undefined && (
+                                {debug && msg.usedRetrieval !== undefined && (
                                     <small className="retrieval-status">
                                         <Icon name={msg.usedRetrieval ? 'check' : 'info'} size={13} />
                                         {msg.usedRetrieval ? 'Used document context' : 'No retrieval'}
@@ -468,7 +478,7 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
             </div>
 
             <div className="chat-input-container">
-                {speechSupported && (
+                {speechSupported && debug && (
                     <button
                         className={`btn-microphone ${isListening ? 'listening' : ''}`}
                         onClick={toggleListening}
@@ -491,6 +501,12 @@ const ChatInterface = ({ clientId, isPublic = false, greeting = '', accentColor,
                     <span>Send</span>
                 </button>
             </div>
+            {!debug && (
+                <p className="chat-disclaimer">
+                    {botName || 'This assistant'} is AI-powered and may occasionally get things wrong — for
+                    account changes we'll always confirm with you first.
+                </p>
+            )}
         </div>
     );
 };
