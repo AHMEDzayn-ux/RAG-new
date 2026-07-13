@@ -13,6 +13,7 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 import sentence_transformers  # noqa: F401  (side-effect: init torch/OpenMP first)
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -35,18 +36,28 @@ from services.client_store import reconcile_disk_collections
 
 logger = get_logger(__name__)
 
+# Keep a reference to the background startup task so it isn't garbage-collected
+# mid-run (asyncio only holds a weak reference to a bare fire-and-forget task).
+_background_tasks: set = set()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup: ensure DB tables exist and import pre-existing on-disk clients."""
-    init_db()
+
+def _reconcile_and_seed():
+    """Import on-disk clients + self-heal demo data (KB reindex, portal dataset).
+
+    Runs off the event loop in a worker thread. On an ephemeral host this can
+    involve re-embedding a KB and regenerating a synthetic telecom dataset —
+    slow enough that doing it inline in `lifespan` blocked the app from ever
+    opening its listening socket, which failed DigitalOcean's readiness probe
+    and got the container killed before startup could finish. Best-effort:
+    any error here is logged, never crashes the app.
+    """
     db = SessionLocal()
     try:
         imported = reconcile_disk_collections(db)
         if imported:
             logger.info(f"Reconciled {imported} on-disk client collection(s) into DB")
-        # Recreate demo clients if a wiped/fresh host lost them (must run BEFORE
-        # bootstrap so the admin claims them as their owner).
+        # Recreate demo clients / repair their KB+portal data if a wiped/fresh
+        # host lost them (must run BEFORE bootstrap so the admin claims them).
         from services.seed_demo import seed_demo_clients
         seeded = seed_demo_clients(db)
         if seeded:
@@ -58,6 +69,17 @@ async def lifespan(app: FastAPI):
         logger.error(f"Startup reconciliation failed: {e}")
     finally:
         db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: ensure DB tables exist; run client reconciliation/self-heal in
+    the background so the app becomes ready (and passes the platform's
+    readiness probe) immediately instead of waiting on it."""
+    init_db()
+    task = asyncio.create_task(asyncio.to_thread(_reconcile_and_seed))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     yield
 
 # Log configuration at startup
