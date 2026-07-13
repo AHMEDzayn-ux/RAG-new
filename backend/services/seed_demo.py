@@ -16,6 +16,8 @@ durable deployment and never clobbers real data. Defensive: one client's
 failure won't break app startup.
 """
 
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from services import client_store, telecom_store
@@ -34,6 +36,24 @@ DEMO_CLIENTS = [
     {"slug": "unihelp", "name": "UniHelp", "domain": "university",
      "kb": "university_knowledge_base.json"},
 ]
+
+# Seed KBs must be found regardless of DOCUMENTS_DIR. The prod Docker image is
+# built with source_dir=backend and `COPY . .`, so the repo-root documents/ dir
+# is NOT in the image — the seed KBs are bundled at backend/documents/ instead
+# (this exact mismatch is what left client_nexus's KB unindexed in production).
+# Check DOCUMENTS_DIR first, then the bundled copy next to this package.
+_KB_SEARCH_DIRS = [
+    settings.documents_dir,
+    Path(__file__).resolve().parent.parent / "documents",  # backend/documents/
+]
+
+
+def _find_kb(filename: str) -> Path | None:
+    for base in _KB_SEARCH_DIRS:
+        candidate = Path(base) / filename
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def seed_demo_clients(db: Session) -> int:
@@ -71,8 +91,8 @@ def seed_demo_clients(db: Session) -> int:
                 has_kb = False
 
             if not has_kb:
-                kb_path = settings.documents_dir / spec["kb"]
-                if kb_path.exists():
+                kb_path = _find_kb(spec["kb"])
+                if kb_path is not None:
                     result = pipeline.index_documents(
                         file_paths=[str(kb_path)],
                         metadata={"category": "seed", "doc_type": "knowledge_base"},
@@ -94,7 +114,11 @@ def seed_demo_clients(db: Session) -> int:
                         f"{'Seeded' if is_new else 'Repaired'} demo client '{slug}' KB with {chunks} chunks"
                     )
                 else:
-                    logger.warning(f"Seed KB not found for '{slug}': {kb_path}")
+                    logger.error(
+                        f"Seed KB '{spec['kb']}' for '{slug}' not found in any of "
+                        f"{[str(d) for d in _KB_SEARCH_DIRS]} — general Q&A will fail "
+                        f"until the KB file ships with the image"
+                    )
 
             if is_new:
                 # Demo mock accounts so account lookup/change works out of the box.
