@@ -1,20 +1,26 @@
 """
 Demo seeding — makes a fresh/wiped deployment self-heal.
 
-On free hosts (e.g. Render free tier) the disk is ephemeral: the SQLite DB and
-FAISS indexes are wiped on every deploy/cold-start, so demo clients (nexus,
-unihelp) and their knowledge bases disappear and /c/{slug} 404s. This recreates
-them idempotently on startup so the public demo always works.
+On free/ephemeral hosts the disk can be wiped on deploy/cold-start/restart, so
+demo clients (nexus, unihelp), their FAISS knowledge-base collections, and the
+operator portal dataset can disappear. Observed in production: the SQLite DB
+(client rows) survived a restart while the FAISS vector-store directory did
+NOT — so the client existed but `search_knowledge_base` hit "Collection
+'client_nexus' does not exist" and the bot honestly had nothing to answer
+from, even though documents/nexus_knowledge_base.json was right there. This
+module repairs each piece independently — client row, KB collection, operator
+dataset — on every startup, so a partial wipe self-heals too.
 
-Idempotent: any client that already exists is skipped, so it's a no-op on a
-durable DB and never clobbers real data. Defensive: one client's failure won't
-break app startup.
+Idempotent: only ever fills in what's missing, so it's a no-op on a fully
+durable deployment and never clobbers real data. Defensive: one client's
+failure won't break app startup.
 """
 
 from sqlalchemy.orm import Session
 
 from services import client_store, telecom_store
 from telecom_models import Customer
+from db_models import Document
 from config import get_settings
 from logger import get_logger
 
@@ -42,18 +48,29 @@ def seed_demo_clients(db: Session) -> int:
         slug = spec["slug"]
         try:
             client = client_store.get_client(db, slug)
-            if client is None:
+            is_new = client is None
+            if is_new:
                 client = client_store.create_client(
                     db, slug=slug, name=spec["name"], domain=spec["domain"],
                 )  # owner_id NULL -> claimed by the bootstrap admin right after
 
-                manager = get_pipeline_manager()
-                pipeline = manager.create_pipeline(
-                    client_id=slug,
-                    system_role=client_store.resolve_persona(client),
-                    domain=spec["domain"],
-                )
+            # Repair the KB vector-store collection whenever it's missing or empty —
+            # this covers a brand-new client AND (the bug actually seen in prod) a
+            # pre-existing client whose FAISS collection got wiped independently of
+            # its DB row. get_pipeline() lazy-loads from disk first so a healthy,
+            # already-persisted collection is never needlessly re-indexed.
+            manager = get_pipeline_manager()
+            pipeline = manager.get_pipeline(slug) or manager.create_pipeline(
+                client_id=slug,
+                system_role=client_store.resolve_persona(client),
+                domain=spec["domain"],
+            )
+            try:
+                has_kb = pipeline.vector_store.get_collection_count(pipeline.collection_name) > 0
+            except ValueError:
+                has_kb = False
 
+            if not has_kb:
                 kb_path = settings.documents_dir / spec["kb"]
                 if kb_path.exists():
                     result = pipeline.index_documents(
@@ -62,23 +79,29 @@ def seed_demo_clients(db: Session) -> int:
                     )
                     chunks = result.get("chunks_created", result.get("total_chunks", 0)) \
                         if isinstance(result, dict) else 0
-                    try:
-                        client_store.add_document(
-                            db, client_slug=slug, filename=spec["kb"],
-                            doc_type="json", chunk_count=chunks,
-                        )
-                    except Exception:
-                        pass
-                    logger.info(f"Seeded demo client '{slug}' with {chunks} KB chunks")
+                    already_logged = db.query(Document.id).filter(
+                        Document.client_slug == slug, Document.filename == spec["kb"],
+                    ).first() is not None
+                    if not already_logged:
+                        try:
+                            client_store.add_document(
+                                db, client_slug=slug, filename=spec["kb"],
+                                doc_type="json", chunk_count=chunks,
+                            )
+                        except Exception:
+                            pass
+                    logger.info(
+                        f"{'Seeded' if is_new else 'Repaired'} demo client '{slug}' KB with {chunks} chunks"
+                    )
                 else:
                     logger.warning(f"Seed KB not found for '{slug}': {kb_path}")
 
+            if is_new:
                 # Demo mock accounts so account lookup/change works out of the box.
                 try:
                     client_store.seed_demo_accounts(db, slug, spec["domain"])
                 except Exception as e:
                     logger.warning(f"Could not seed accounts for '{slug}': {e}")
-
                 seeded += 1
 
             # Operator portal dataset (customers/subscriptions/CDRs/tickets etc.) used
