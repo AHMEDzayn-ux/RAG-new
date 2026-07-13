@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     jwt_secret: str = ""                    # set JWT_SECRET in prod; dev falls back below
     jwt_expire_days: int = 7
     allow_registration: bool = True         # open sign-up (fine pre-launch; lock for prod SaaS)
+    seed_demo_on_startup: bool = True        # recreate demo clients (nexus/unihelp) if missing
     
     # Application
     environment: str = "development"

@@ -45,7 +45,13 @@ async def lifespan(app: FastAPI):
         imported = reconcile_disk_collections(db)
         if imported:
             logger.info(f"Reconciled {imported} on-disk client collection(s) into DB")
-        # Seed the first operator account (claims any legacy clients).
+        # Recreate demo clients if a wiped/fresh host lost them (must run BEFORE
+        # bootstrap so the admin claims them as their owner).
+        from services.seed_demo import seed_demo_clients
+        seeded = seed_demo_clients(db)
+        if seeded:
+            logger.info(f"Seeded {seeded} demo client(s)")
+        # Seed the first operator account (claims any legacy/seeded clients).
         from services.auth_service import bootstrap_admin
         bootstrap_admin(db)
     except Exception as e:
