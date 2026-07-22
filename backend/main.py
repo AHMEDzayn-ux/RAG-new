@@ -107,7 +107,7 @@ if settings.environment == "production":
         TrustedHostMiddleware,
         allowed_hosts=[
             "api.yourdomain.com", "*.onrender.com", "*.hf.space", "*.ondigitalocean.app",
-            "localhost", "127.0.0.1",
+            "*.run.app", "localhost", "127.0.0.1",
         ]
     )
 
@@ -115,9 +115,9 @@ if settings.environment == "production":
 if settings.environment == "production":
     # Production: Restrict to Vercel/Render/HF Spaces/DO deployments and specific origins
     allowed_origins = []
-    # Allow all Vercel, Render, Hugging Face Space, and DigitalOcean deployments with regex
-    allowed_origin_regex = r"https://(.*\.vercel\.app|.*\.onrender\.com|.*\.hf\.space|.*\.ondigitalocean\.app)"
-    logger.info(f"CORS restricted to Vercel/Render/HF Spaces/DO deployments: {allowed_origin_regex}")
+    # Allow all Vercel, Render, Hugging Face Space, DigitalOcean, and Cloud Run deployments with regex
+    allowed_origin_regex = r"https://(.*\.vercel\.app|.*\.onrender\.com|.*\.hf\.space|.*\.ondigitalocean\.app|.*\.run\.app)"
+    logger.info(f"CORS restricted to Vercel/Render/HF Spaces/DO/Cloud Run deployments: {allowed_origin_regex}")
 else:
     # Development: Allow localhost + Vercel deployments
     allowed_origins = [

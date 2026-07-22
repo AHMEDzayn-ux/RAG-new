@@ -1,4 +1,4 @@
-# Backend now runs on DigitalOcean App Platform (see .do/app.yaml) - Render's Python
+# Backend now runs on Google Cloud Run (see backend/Dockerfile) - Render's Python
 # free tier couldn't fit the embedding + reranker models in 512MB. This file only
 # hosts the frontend static site now.
 services:
@@ -11,7 +11,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://nexus-backend-7yq3e.ondigitalocean.app
+        value: https://nexus-backend-336283005819.us-central1.run.app
     routes:
       - type: rewrite
         source: /*
