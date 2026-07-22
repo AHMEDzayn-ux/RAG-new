@@ -68,13 +68,13 @@ const AdminLogin = ({ onLogin }) => {
                 >
                     {isRegister ? 'Have an account? Sign in' : 'New here? Create an account'}
                 </button>
-                {import.meta.env.DEV && !isRegister && (
+                {!isRegister && (
                     <button
                         type="button"
                         className="login-switch"
                         onClick={() => { setEmail('admin@local'); setPassword('Ruzaini@123'); setError(''); }}
                     >
-                        Autofill demo login
+                        Use demo login (admin@local)
                     </button>
                 )}
             </form>
