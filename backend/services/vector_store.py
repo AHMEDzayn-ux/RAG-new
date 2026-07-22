@@ -255,15 +255,16 @@ class VectorStoreService:
         
         del self.collections[name]
         
-        # Delete persisted files if they exist
+        # Delete persisted files if they exist (index + JSON and any legacy pkl)
         index_path = Path(self.persist_directory) / f"{name}.index"
-        metadata_path = Path(self.persist_directory) / f"{name}_metadata.pkl"
-        
-        if index_path.exists():
-            index_path.unlink()
-        if metadata_path.exists():
-            metadata_path.unlink()
-        
+        for sidecar in (
+            index_path,
+            Path(self.persist_directory) / f"{name}_metadata.json",
+            Path(self.persist_directory) / f"{name}_metadata.pkl",
+        ):
+            if sidecar.exists():
+                sidecar.unlink()
+
         logger.info(f"Deleted collection '{name}'")
     
     def list_collections(self) -> List[str]:
@@ -293,23 +294,32 @@ class VectorStoreService:
     def persist(self) -> None:
         """
         Save all collections to disk.
+
+        Metadata is written as JSON (safe, portable, human-inspectable) rather
+        than pickle. A legacy ``*_metadata.pkl`` sidecar, if present, is removed
+        once the JSON has been written so the two can't drift out of sync.
         """
         for name, collection in self.collections.items():
             # Save FAISS index
             index_path = Path(self.persist_directory) / f"{name}.index"
             faiss.write_index(collection['index'], str(index_path))
-            
-            # Save metadata
+
+            # Save metadata as JSON
             metadata = {
                 'documents': collection['documents'],
                 'metadatas': collection['metadatas'],
                 'ids': collection['ids'],
                 'dimension': collection['dimension']
             }
-            metadata_path = Path(self.persist_directory) / f"{name}_metadata.pkl"
-            with open(metadata_path, 'wb') as f:
-                pickle.dump(metadata, f)
-            
+            metadata_path = Path(self.persist_directory) / f"{name}_metadata.json"
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False)
+
+            # Retire any old pickle sidecar so stale data isn't loaded later.
+            legacy_pkl = Path(self.persist_directory) / f"{name}_metadata.pkl"
+            if legacy_pkl.exists():
+                legacy_pkl.unlink()
+
             logger.info(f"Persisted collection '{name}'")
     
     def load_collection(self, name: str) -> None:
@@ -320,18 +330,25 @@ class VectorStoreService:
             name: Name of the collection to load
         """
         index_path = Path(self.persist_directory) / f"{name}.index"
-        metadata_path = Path(self.persist_directory) / f"{name}_metadata.pkl"
-        
-        if not index_path.exists() or not metadata_path.exists():
+        json_path = Path(self.persist_directory) / f"{name}_metadata.json"
+        legacy_pkl_path = Path(self.persist_directory) / f"{name}_metadata.pkl"
+
+        if not index_path.exists() or not (json_path.exists() or legacy_pkl_path.exists()):
             raise ValueError(f"Collection '{name}' does not exist on disk")
-        
+
         # Load FAISS index
         index = faiss.read_index(str(index_path))
-        
-        # Load metadata
-        with open(metadata_path, 'rb') as f:
-            metadata = pickle.load(f)
-        
+
+        # Load metadata — prefer JSON; fall back to a legacy pickle sidecar for
+        # collections indexed before the JSON switch (loaded once, then rewritten
+        # as JSON on the next persist()).
+        if json_path.exists():
+            with open(json_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+        else:
+            with open(legacy_pkl_path, 'rb') as f:
+                metadata = pickle.load(f)
+
         self.collections[name] = {
             'index': index,
             'documents': metadata['documents'],
@@ -374,19 +391,27 @@ class VectorStoreService:
         # Update document
         if document is not None:
             collection['documents'][idx] = document
-        
+
         # Update metadata
         if metadata is not None:
             collection['metadatas'][idx] = metadata
-        
-        # Note: FAISS doesn't support in-place updates of vectors
-        # If embedding is provided, we need to rebuild the index
+
+        # FAISS has no in-place vector update, but IndexFlatL2 supports
+        # reconstruct(), so we can pull every stored vector back out, swap the
+        # one row, and rebuild — no second copy of the embeddings kept in RAM.
         if embedding is not None:
-            raise NotImplementedError(
-                "Updating embeddings requires rebuilding the FAISS index. "
-                "Consider deleting and re-adding the document instead."
+            new_vec = np.array(embedding, dtype=np.float32)
+            if new_vec.shape[0] != collection['dimension']:
+                raise ValueError(
+                    f"Embedding dimension {new_vec.shape[0]} does not match "
+                    f"collection dimension {collection['dimension']}"
+                )
+            vectors = self._reconstruct_all(collection['index'])
+            vectors[idx] = new_vec
+            collection['index'] = self._build_index_from_vectors(
+                collection['dimension'], vectors
             )
-        
+
         logger.info(f"Updated document '{document_id}' in collection '{collection_name}'")
     
     def delete_documents(
@@ -405,35 +430,54 @@ class VectorStoreService:
             raise ValueError(f"Collection '{collection_name}' does not exist")
         
         collection = self.collections[collection_name]
-        
-        # Note: FAISS doesn't support deletion efficiently
-        # We need to rebuild the index without deleted documents
+
+        # FAISS IndexFlatL2 has no efficient in-place delete, so we rebuild the
+        # index from the surviving vectors. IndexFlatL2 supports reconstruct(),
+        # so we recover the kept vectors straight from the index rather than
+        # keeping a second copy of every embedding resident in RAM.
+        delete_set = set(document_ids)
         indices_to_keep = [
             i for i, doc_id in enumerate(collection['ids'])
-            if doc_id not in document_ids
+            if doc_id not in delete_set
         ]
-        
+
         if len(indices_to_keep) == len(collection['ids']):
             logger.warning(f"No documents found with IDs: {document_ids}")
             return
-        
-        # Rebuild index
-        dimension = collection['dimension']
-        new_index = faiss.IndexFlatL2(dimension)
-        
-        # Extract embeddings from old index
-        old_vectors = []
-        for i in indices_to_keep:
-            # Note: This is inefficient but FAISS doesn't provide direct vector access
-            # In practice, you'd want to store embeddings separately
-            pass
-        
-        # For now, just update the metadata
+
+        # Reconstruct only the surviving vectors and rebuild the index so the
+        # FAISS positions stay aligned with the parallel document/metadata lists.
+        all_vectors = self._reconstruct_all(collection['index'])
+        kept_vectors = all_vectors[indices_to_keep] if indices_to_keep else all_vectors[:0]
+        collection['index'] = self._build_index_from_vectors(
+            collection['dimension'], kept_vectors
+        )
+
         collection['documents'] = [collection['documents'][i] for i in indices_to_keep]
         collection['metadatas'] = [collection['metadatas'][i] for i in indices_to_keep]
         collection['ids'] = [collection['ids'][i] for i in indices_to_keep]
-        
-        logger.warning(
-            f"Deleted {len(document_ids)} document references from collection '{collection_name}'. "
-            "Note: FAISS index needs manual rebuild for full deletion."
+
+        logger.info(
+            f"Deleted {len(document_ids)} document(s) from collection '{collection_name}'; "
+            f"index rebuilt with {len(indices_to_keep)} remaining vectors"
         )
+
+    @staticmethod
+    def _reconstruct_all(index: "faiss.Index") -> np.ndarray:
+        """Return every stored vector as a (n, dim) float32 array.
+
+        IndexFlatL2 stores raw vectors, so reconstruct_n recovers them exactly
+        without us having to keep a parallel copy of the embeddings in memory.
+        """
+        n = index.ntotal
+        if n == 0:
+            return np.empty((0, index.d), dtype=np.float32)
+        return index.reconstruct_n(0, n)
+
+    @staticmethod
+    def _build_index_from_vectors(dimension: int, vectors: np.ndarray) -> "faiss.Index":
+        """Create a fresh IndexFlatL2 populated with the given vectors."""
+        new_index = faiss.IndexFlatL2(dimension)
+        if vectors is not None and len(vectors) > 0:
+            new_index.add(np.ascontiguousarray(vectors, dtype=np.float32))
+        return new_index

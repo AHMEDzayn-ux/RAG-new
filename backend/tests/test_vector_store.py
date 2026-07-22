@@ -333,9 +333,9 @@ class TestPersistence:
         
         # Verify files were created
         assert (Path(temp_persist_dir) / "collection1.index").exists()
-        assert (Path(temp_persist_dir) / "collection1_metadata.pkl").exists()
+        assert (Path(temp_persist_dir) / "collection1_metadata.json").exists()
         assert (Path(temp_persist_dir) / "collection2.index").exists()
-        assert (Path(temp_persist_dir) / "collection2_metadata.pkl").exists()
+        assert (Path(temp_persist_dir) / "collection2_metadata.json").exists()
 
 
 class TestUpdateOperations:
@@ -363,6 +363,36 @@ class TestUpdateOperations:
         idx = collection["ids"].index("doc_2")
         assert collection["documents"][idx] == new_text
     
+    def test_delete_documents_rebuilds_index(self, vector_store, sample_documents, sample_embeddings):
+        """Deleting docs must shrink the FAISS index too, not just the metadata lists."""
+        vector_store.create_collection("test_collection", embedding_dimension=384)
+        vector_store.add_documents(
+            collection_name="test_collection",
+            documents=sample_documents[:3],
+            embeddings=sample_embeddings[:3],
+            ids=["doc_1", "doc_2", "doc_3"],
+        )
+
+        vector_store.delete_documents("test_collection", ["doc_2"])
+
+        collection = vector_store.collections["test_collection"]
+        # Parallel lists AND the FAISS index must all agree on 2 remaining docs.
+        assert collection["ids"] == ["doc_1", "doc_3"]
+        assert len(collection["documents"]) == 2
+        assert collection["index"].ntotal == 2
+
+        # The deleted vector must no longer be retrievable, and surviving
+        # positions must still map to the correct documents.
+        results = vector_store.query(
+            collection_name="test_collection",
+            query_embeddings=[sample_embeddings[1]],  # was doc_2's vector
+            n_results=3,
+        )
+        assert "doc_2" not in results["ids"][0]
+        for ret_id, ret_doc in zip(results["ids"][0], results["documents"][0]):
+            expected_idx = collection["ids"].index(ret_id)
+            assert collection["documents"][expected_idx] == ret_doc
+
     def test_update_document_metadata(self, vector_store, sample_documents, sample_embeddings, sample_metadatas):
         """Test updating document metadata."""
         vector_store.create_collection("test_collection", embedding_dimension=384)
@@ -402,24 +432,32 @@ class TestUpdateOperations:
                 document="New text"
             )
     
-    def test_update_embedding_not_supported(self, vector_store, sample_documents, sample_embeddings):
-        """Test that updating embeddings raises NotImplementedError."""
+    def test_update_embedding_rebuilds_index(self, vector_store, sample_documents, sample_embeddings):
+        """Updating a document's embedding rebuilds the index so search reflects it."""
         vector_store.create_collection("test_collection", embedding_dimension=384)
-        custom_ids = ["doc_1"]
         vector_store.add_documents(
             collection_name="test_collection",
-            documents=sample_documents[:1],
-            embeddings=sample_embeddings[:1],
-            ids=custom_ids
+            documents=sample_documents[:2],
+            embeddings=sample_embeddings[:2],
+            ids=["doc_1", "doc_2"],
         )
-        
-        new_embedding = sample_embeddings[1]
-        with pytest.raises(NotImplementedError, match="rebuilding the FAISS index"):
-            vector_store.update_document(
-                collection_name="test_collection",
-                document_id="doc_1",
-                embedding=new_embedding
-            )
+
+        # Repoint doc_1's vector at doc_2's embedding; a query with that
+        # embedding should now surface doc_1 as an exact (distance ~0) match.
+        vector_store.update_document(
+            collection_name="test_collection",
+            document_id="doc_1",
+            embedding=sample_embeddings[1],
+        )
+
+        results = vector_store.query(
+            collection_name="test_collection",
+            query_embeddings=[sample_embeddings[1]],
+            n_results=2,
+        )
+        assert "doc_1" in results["ids"][0]
+        # The exact-match distance for the updated vector should be ~0.
+        assert min(results["distances"][0]) == pytest.approx(0.0, abs=1e-4)
 
 
 class TestIntegrationWorkflow:
@@ -461,4 +499,4 @@ class TestIntegrationWorkflow:
         
         # Verify persistence
         assert (Path(temp_persist_dir) / "ml_docs.index").exists()
-        assert (Path(temp_persist_dir) / "ml_docs_metadata.pkl").exists()
+        assert (Path(temp_persist_dir) / "ml_docs_metadata.json").exists()

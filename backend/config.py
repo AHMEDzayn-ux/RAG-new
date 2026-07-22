@@ -134,6 +134,14 @@ class Settings(BaseSettings):
     # Uses gemini_utility_model (flash-lite) for cheap, quick transcription.
     stt_provider: str = "gemini"
     
+    # Multi-tenant pipeline cache. Each loaded client pins a FAISS index + BM25
+    # index in RAM; this caps how many stay resident at once (LRU-evicted beyond
+    # it). Lazy-load rehydrates an evicted client on its next request, so this is
+    # a safety valve against unbounded growth, not a hard client limit. On a
+    # single-tenant self-hosted box the default is far above the working set, so
+    # nothing is ever evicted in practice.
+    max_loaded_pipelines: int = 16
+
     # Retrieval
     retrieval_top_k: int = 10  # Increased from 6 to 10 for more comprehensive answers
     
@@ -188,10 +196,17 @@ class Settings(BaseSettings):
         # Set ChromaDB directory if not specified
         if self.chromadb_persist_directory is None:
             self.chromadb_persist_directory = str(self.vector_stores_dir / "chromadb")
-        
-        # Ensure directories exist
-        self.documents_dir.mkdir(parents=True, exist_ok=True)
-        self.vector_stores_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ensure data directories exist. This runs at import time (the settings
+        # singleton is built on import), so it must never raise — a read-only or
+        # not-yet-mounted filesystem would otherwise crash the whole app before
+        # it can even log why. Best-effort; the code that actually writes will
+        # surface a clear error if the dir is genuinely unusable.
+        for directory in (self.documents_dir, self.vector_stores_dir):
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
     
     @property
     def is_production(self) -> bool:

@@ -4,6 +4,7 @@ Orchestrates the complete RAG workflow: document processing, retrieval, and gene
 """
 
 import logging
+from collections import OrderedDict
 from datetime import datetime
 from typing import List, Dict, Optional, Any
 from pathlib import Path
@@ -1618,13 +1619,53 @@ class MultiClientRAGPipeline:
     Each client gets their own collection and optional custom configuration.
     """
     
-    def __init__(self):
-        """Initialize the multi-client RAG manager."""
-        self.pipelines: Dict[str, RAGPipeline] = {}
-        logger.info("MultiClientRAGPipeline initialized with lazy loading")
-        
+    def __init__(self, max_loaded: Optional[int] = None):
+        """Initialize the multi-client RAG manager.
+
+        Args:
+            max_loaded: Max pipelines kept resident in RAM before the
+                least-recently-used one is evicted. Defaults to
+                ``settings.max_loaded_pipelines``. Evicted clients are
+                transparently re-loaded from disk on their next request.
+        """
+        # Ordered by recency of use so we can cheaply evict the LRU entry.
+        self.pipelines: "OrderedDict[str, RAGPipeline]" = OrderedDict()
+        self.max_loaded = max_loaded or settings.max_loaded_pipelines
+        logger.info(
+            f"MultiClientRAGPipeline initialized with lazy loading "
+            f"(max resident pipelines: {self.max_loaded})"
+        )
+
         # Don't restore clients on startup - use lazy loading instead
         # Clients will be loaded on-demand when accessed
+
+    def _register(self, client_id: str, pipeline: "RAGPipeline") -> None:
+        """Insert a pipeline as most-recently-used and evict the LRU if over cap."""
+        self.pipelines[client_id] = pipeline
+        self.pipelines.move_to_end(client_id)
+        self._evict_if_needed()
+
+    def _evict_if_needed(self) -> None:
+        """Drop least-recently-used pipelines from RAM while over the cap.
+
+        This only frees memory (FAISS + BM25 indexes); it never touches the
+        on-disk collection, so an evicted client is lazily re-loaded intact on
+        its next request.
+        """
+        while len(self.pipelines) > self.max_loaded:
+            evicted_id, _ = self.pipelines.popitem(last=False)  # oldest
+            logger.info(
+                f"Evicting LRU pipeline '{evicted_id}' from memory "
+                f"(resident={len(self.pipelines)}/{self.max_loaded})"
+            )
+
+    def unload(self, client_id: str) -> bool:
+        """Drop a single client's pipeline from RAM (keeps on-disk data)."""
+        if client_id in self.pipelines:
+            del self.pipelines[client_id]
+            logger.info(f"Unloaded pipeline '{client_id}' from memory")
+            return True
+        return False
     
     def create_pipeline(
         self,
@@ -1647,6 +1688,7 @@ class MultiClientRAGPipeline:
         """
         if client_id in self.pipelines:
             logger.warning(f"Pipeline for client '{client_id}' already exists")
+            self.pipelines.move_to_end(client_id)
             return self.pipelines[client_id]
 
         pipeline = RAGPipeline(
@@ -1655,10 +1697,10 @@ class MultiClientRAGPipeline:
             system_role=system_role,
             domain=domain
         )
-        
-        self.pipelines[client_id] = pipeline
+
+        self._register(client_id, pipeline)
         logger.info(f"Created pipeline for client: {client_id}")
-        
+
         return pipeline
     
     def get_pipeline(self, client_id: str) -> Optional[RAGPipeline]:
@@ -1671,8 +1713,9 @@ class MultiClientRAGPipeline:
         Returns:
             RAGPipeline instance or None if not found
         """
-        # If already in memory, return it
+        # If already in memory, return it (and mark as most-recently-used)
         if client_id in self.pipelines:
+            self.pipelines.move_to_end(client_id)
             return self.pipelines[client_id]
 
         # Try to lazy-load from disk (client that already has indexed docs)
@@ -1814,9 +1857,9 @@ class MultiClientRAGPipeline:
             # Rebuild BM25 so hybrid search works after a reload (it's in-memory only)
             pipeline.rebuild_bm25_index()
 
-            # Add to pipelines dictionary
-            self.pipelines[client_id] = pipeline
-            
+            # Add to pipelines dictionary (MRU; may evict an older client)
+            self._register(client_id, pipeline)
+
             logger.info(f"Successfully lazy-loaded client: {client_id}")
             return True
             

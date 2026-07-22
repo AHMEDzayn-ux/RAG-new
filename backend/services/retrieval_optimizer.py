@@ -76,15 +76,12 @@ class RetrievalOptimizer:
         # Resolve the re-ranker model (multilingual by default, see config).
         if rerank_model is None:
             rerank_model = get_settings().rerank_model
+        self.rerank_model = rerank_model
 
-        # Initialize re-ranker if enabled (shared process-wide, see cache above)
+        # The cross-encoder is ~470MB. We DON'T load it here — an empty/DB-only
+        # pipeline that never reranks shouldn't pay that cost. It's loaded once,
+        # process-wide, on the first rerank() call (see _ensure_reranker).
         self.reranker = None
-        if enable_reranking:
-            try:
-                self.reranker = _get_shared_reranker(rerank_model)
-            except Exception as e:
-                logger.error(f"Failed to load re-ranker: {e}")
-                self.enable_reranking = False
         
         # BM25 index (will be built per collection)
         self.bm25_indexes: Dict[str, BM25Okapi] = {}
@@ -92,7 +89,26 @@ class RetrievalOptimizer:
         self.bm25_doc_ids: Dict[str, List[int]] = {}
         
         logger.info(f"RetrievalOptimizer initialized (vector={vector_weight}, keyword={keyword_weight})")
-    
+
+    def _ensure_reranker(self) -> bool:
+        """Lazily load the cross-encoder on first use (shared process-wide).
+
+        Returns True if a reranker is available. Loading is attempted at most
+        once; a failure disables reranking for this instance so we don't retry
+        the (expensive) load on every query.
+        """
+        if not self.enable_reranking:
+            return False
+        if self.reranker is not None:
+            return True
+        try:
+            self.reranker = _get_shared_reranker(self.rerank_model)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to load re-ranker: {e}")
+            self.enable_reranking = False
+            return False
+
     def build_bm25_index(
         self,
         collection_name: str,
@@ -344,12 +360,12 @@ class RetrievalOptimizer:
         Returns:
             Re-ranked documents
         """
-        if not self.enable_reranking or self.reranker is None:
-            logger.warning("Re-ranking not available, returning original order")
-            return documents[:top_k]
-        
         if not documents:
             return []
+
+        if not self._ensure_reranker():
+            logger.warning("Re-ranking not available, returning original order")
+            return documents[:top_k]
         
         try:
             # Prepare query-document pairs
