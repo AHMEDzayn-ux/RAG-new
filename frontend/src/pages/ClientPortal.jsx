@@ -32,7 +32,7 @@ const BASIC_TABS = [
 
 // ---- login gate -------------------------------------------------------------
 const DEMO_PORTAL_LOGINS = {
-    nexus: { email: 'admin@nexus.lk', password: 'NexusDemo@123' },
+    nexus: { email: 'admin@local', password: 'Admin@123' },
 };
 
 const PortalLogin = ({ slug, brand, onLogin }) => {
@@ -70,13 +70,13 @@ const PortalLogin = ({ slug, brand, onLogin }) => {
                 <button type="submit" disabled={loading || !email || !password}>
                     {loading ? 'Signing in…' : 'Sign in'}
                 </button>
-                {import.meta.env.DEV && demoCreds && (
+                {demoCreds && (
                     <button
                         type="button"
                         className="portal-login-demo"
                         onClick={() => { setEmail(demoCreds.email); setPassword(demoCreds.password); setError(''); }}
                     >
-                        Autofill demo login
+                        Use demo login ({demoCreds.email})
                     </button>
                 )}
                 <div className="portal-login-note">
