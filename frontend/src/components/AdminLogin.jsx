@@ -72,7 +72,7 @@ const AdminLogin = ({ onLogin }) => {
                     <button
                         type="button"
                         className="login-switch"
-                        onClick={() => { setEmail('admin@local'); setPassword('Ruzaini@123'); setError(''); }}
+                        onClick={() => { setEmail('admin@local'); setPassword('Admin@123'); setError(''); }}
                     >
                         Use demo login (admin@local)
                     </button>

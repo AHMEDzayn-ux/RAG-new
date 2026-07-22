@@ -53,15 +53,21 @@ def _reconcile_and_seed():
     """
     db = SessionLocal()
     try:
-        imported = reconcile_disk_collections(db)
-        if imported:
-            logger.info(f"Reconciled {imported} on-disk client collection(s) into DB")
-        # Recreate demo clients / repair their KB+portal data if a wiped/fresh
-        # host lost them (must run BEFORE bootstrap so the admin claims them).
-        from services.seed_demo import seed_demo_clients
-        seeded = seed_demo_clients(db)
-        if seeded:
-            logger.info(f"Seeded {seeded} demo client(s)")
+        try:
+            imported = reconcile_disk_collections(db)
+            if imported:
+                logger.info(f"Reconciled {imported} on-disk client collection(s) into DB")
+            # Recreate demo clients / repair their KB+portal data if a wiped/fresh
+            # host lost them (must run BEFORE bootstrap so the admin claims them).
+            from services.seed_demo import seed_demo_clients
+            seeded = seed_demo_clients(db)
+            if seeded:
+                logger.info(f"Seeded {seeded} demo client(s)")
+        except Exception as e:
+            # Never let a KB/demo-data failure (e.g. an HF Hub rate limit) block
+            # the admin bootstrap below — that would lock the operator out of
+            # their own console every single boot.
+            logger.error(f"Client reconciliation/seeding failed: {e}")
         # Seed the first operator account (claims any legacy/seeded clients).
         from services.auth_service import bootstrap_admin
         bootstrap_admin(db)
