@@ -9,6 +9,7 @@ export const WS_BASE = API_BASE_URL.replace(/^http/, "ws");
 
 // ---- Admin session token ----------------------------------------------------
 const TOKEN_KEY = "admin_token";
+export const AUTH_EXPIRED_EVENT = "nexus:auth-expired";
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
@@ -24,7 +25,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err.response && err.response.status === 401) clearToken();
+    if (err.response && err.response.status === 401) {
+      clearToken();
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    }
     return Promise.reject(err);
   }
 );

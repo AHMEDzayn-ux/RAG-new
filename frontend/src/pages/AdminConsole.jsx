@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { isAuthenticated, logout } from '../services/api';
+import { useEffect, useState } from 'react';
+import { AUTH_EXPIRED_EVENT, getMe, isAuthenticated, logout } from '../services/api';
 import AdminLogin from '../components/AdminLogin';
 import ClientManager from '../components/ClientManager';
 import DocumentUpload from '../components/DocumentUpload';
@@ -26,10 +26,49 @@ const TABS = [
 ];
 
 const AdminConsole = () => {
-    const [authed, setAuthed] = useState(isAuthenticated());
+    const [authed, setAuthed] = useState(false);
+    const [checkingAuth, setCheckingAuth] = useState(isAuthenticated());
     const [selectedClient, setSelectedClient] = useState(null);
     const [tab, setTab] = useState('knowledge');
     const [testVoice, setTestVoice] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        const expireSession = () => {
+            if (!active) return;
+            setAuthed(false);
+            setCheckingAuth(false);
+            setSelectedClient(null);
+        };
+
+        window.addEventListener(AUTH_EXPIRED_EVENT, expireSession);
+
+        if (isAuthenticated()) {
+            getMe()
+                .then(() => {
+                    if (active) setAuthed(true);
+                })
+                .catch(expireSession)
+                .finally(() => {
+                    if (active) setCheckingAuth(false);
+                });
+        } else {
+            setCheckingAuth(false);
+        }
+
+        return () => {
+            active = false;
+            window.removeEventListener(AUTH_EXPIRED_EVENT, expireSession);
+        };
+    }, []);
+
+    if (checkingAuth) {
+        return (
+            <div className="login-wrap">
+                <div className="login-card"><p>Checking session…</p></div>
+            </div>
+        );
+    }
 
     if (!authed) {
         return <AdminLogin onLogin={() => setAuthed(true)} />;
