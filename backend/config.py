@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     jwt_expire_days: int = 7
     allow_registration: bool = True         # open sign-up (fine pre-launch; lock for prod SaaS)
     seed_demo_on_startup: bool = True        # recreate demo clients (nexus/unihelp) if missing
+    # Cloud Run's default request-based billing suspends background CPU after a
+    # response. Enable this there so demo KB indexing finishes while startup CPU
+    # is guaranteed, before the container begins accepting requests. Other hosts
+    # can retain the non-blocking background startup behavior.
+    block_startup_until_seeded: bool = False
     
     # Application
     environment: str = "development"

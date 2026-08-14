@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from logger import get_logger
+from logger import get_logger, setup_logging
 from api.clients import router as clients_router
 from api.documents import router as documents_router
 from api.query import router as query_router
@@ -34,6 +34,7 @@ from security import SecurityMiddleware
 from database import init_db, SessionLocal
 from services.client_store import reconcile_disk_collections
 
+setup_logging(level=settings.log_level)
 logger = get_logger(__name__)
 
 # Keep a reference to the background startup task so it isn't garbage-collected
@@ -80,12 +81,18 @@ def _reconcile_and_seed():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: ensure DB tables exist; run client reconciliation/self-heal in
-    the background so the app becomes ready (and passes the platform's
-    readiness probe) immediately instead of waiting on it."""
+    the background by default. Cloud Run deployments can opt into blocking
+    startup until seeding completes because request-based CPU is suspended
+    outside requests once the app becomes ready."""
     init_db()
-    task = asyncio.create_task(asyncio.to_thread(_reconcile_and_seed))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    if settings.block_startup_until_seeded:
+        logger.info("Waiting for reconciliation and demo seeding before readiness")
+        await asyncio.to_thread(_reconcile_and_seed)
+        logger.info("Startup reconciliation and demo seeding complete")
+    else:
+        task = asyncio.create_task(asyncio.to_thread(_reconcile_and_seed))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
     yield
 
 # Log configuration at startup
