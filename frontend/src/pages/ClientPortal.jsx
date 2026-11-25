@@ -31,16 +31,30 @@ const BASIC_TABS = [
 ];
 
 // ---- login gate -------------------------------------------------------------
-const DEMO_PORTAL_LOGINS = {
-    nexus: { email: 'admin@local', password: 'Admin@123' },
+const demoDate = new Date().toISOString();
+const DEMO_OVERVIEW = {
+    subscribers_total: 64,
+    subscribers_active: 60,
+    customers_total: 50,
+    tickets_open: 33,
+    activations_today: 3,
+    revenue_today: 2730,
+    revenue_month: 18450,
+    recent_activations: [
+        { id: 1, reference: 'DEMO-A101', msisdn: 'Demo line 01', package_name: 'Weekly Data', channel: 'web', price: 490, activated_at: demoDate },
+        { id: 2, reference: 'DEMO-A102', msisdn: 'Demo line 02', package_name: 'Monthly Combo', channel: 'voice', price: 1290, activated_at: demoDate },
+    ],
+    recent_tickets: [
+        { id: 1, ticket_number: 'DEMO-T101', subject: 'Help with prepaid recharge', priority: 'medium', status: 'open', channel: 'web', created_at: demoDate },
+        { id: 2, ticket_number: 'DEMO-T102', subject: 'Check mobile data settings', priority: 'low', status: 'resolved', channel: 'voice', created_at: demoDate },
+    ],
 };
 
-const PortalLogin = ({ slug, brand, onLogin }) => {
+const PortalLogin = ({ slug, brand, onLogin, onDemo }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const demoCreds = import.meta.env.VITE_SHOW_DEMO_LOGINS !== 'false' && DEMO_PORTAL_LOGINS[slug];
 
     const submit = async (e) => {
         e.preventDefault();
@@ -70,13 +84,14 @@ const PortalLogin = ({ slug, brand, onLogin }) => {
                 <button type="submit" disabled={loading || !email || !password}>
                     {loading ? 'Signing in…' : 'Sign in'}
                 </button>
-                {demoCreds && (
+                {onDemo && (
                     <button
                         type="button"
                         className="portal-login-demo"
-                        onClick={() => { setEmail(demoCreds.email); setPassword(demoCreds.password); setError(''); }}
+                        onClick={onDemo}
+                        disabled={loading}
                     >
-                        Use demo login ({demoCreds.email})
+                        Demo Login
                     </button>
                 )}
                 <div className="portal-login-note">
@@ -93,7 +108,7 @@ const PortalLogin = ({ slug, brand, onLogin }) => {
 // ---- page -------------------------------------------------------------------
 const ClientPortal = () => {
     const { slug } = useParams();
-    const [status, setStatus] = useState('loading'); // loading | login | denied | ok
+    const [status, setStatus] = useState('loading'); // loading | login | denied | ok | demo
     const [me, setMe] = useState(null);
     const [config, setConfig] = useState(null);
     const [tab, setTab] = useState('dashboard');
@@ -118,17 +133,28 @@ const ClientPortal = () => {
         checkAuth();
     }, [slug, checkAuth]);
 
-    const signOut = () => { logout(); setMe(null); setStatus('login'); };
+    const isDemo = status === 'demo';
+    const signOut = () => {
+        if (!isDemo) logout();
+        setMe(null);
+        setTab('dashboard');
+        setStatus('login');
+    };
+    const openDemo = () => {
+        setTab('dashboard');
+        setStatus('demo');
+    };
 
-    const brand = config?.name || slug;
+    const brand = isDemo ? 'Nexus Telecom' : (config?.name || slug);
     const isTelecom = (config?.domain || '') === 'telecom';
-    const tabs = isTelecom ? TELECOM_TABS : BASIC_TABS;
+    const tabs = isDemo ? [] : (isTelecom ? TELECOM_TABS : BASIC_TABS);
 
     if (status === 'loading') {
         return <div className="portal"><Spinner text="Loading portal…" /></div>;
     }
     if (status === 'login') {
-        return <PortalLogin slug={slug} brand={config?.name} onLogin={checkAuth} />;
+        return <PortalLogin slug={slug} brand={config?.name} onLogin={checkAuth}
+            onDemo={slug === 'nexus' ? openDemo : undefined} />;
     }
     if (status === 'denied') {
         return (
@@ -153,24 +179,26 @@ const ClientPortal = () => {
                         <span className="portal-logo"><Icon name="phone-call" size={20} /></span>
                         <div>
                             <h1>{brand} <span style={{ fontWeight: 500, color: 'var(--text-faint)' }}>· Admin</span></h1>
-                            <p>Customer-care operations console</p>
+                            <p>{isDemo ? 'Read-only demo with sample data' : 'Customer-care operations console'}</p>
                         </div>
                     </div>
                     <div className="portal-top-spacer" />
-                    <div className="portal-user">
-                        <strong>{me?.name || me?.email}</strong>
-                        <span>{me?.is_superadmin ? 'Operator (superadmin)' : 'Client admin'}</span>
-                    </div>
+                    {!isDemo && (
+                        <div className="portal-user">
+                            <strong>{me?.name || me?.email}</strong>
+                            <span>{me?.is_superadmin ? 'Operator (superadmin)' : 'Client admin'}</span>
+                        </div>
+                    )}
                     <a className="btn btn-sm" href={`/c/${slug}`} target="_blank" rel="noopener noreferrer">
                         <Icon name="phone-call" size={14} /> Test chatbot
                     </a>
                     <button className="btn btn-sm" onClick={signOut}>
-                        <Icon name="logout" size={14} /> Sign out
+                        <Icon name="logout" size={14} /> {isDemo ? 'Exit demo' : 'Sign out'}
                     </button>
                 </div>
             </div>
 
-            <nav className="portal-tabs">
+            {!isDemo && <nav className="portal-tabs">
                 <div className="portal-tabs-inner">
                     {tabs.map((t) => (
                         <button key={t.key}
@@ -180,10 +208,12 @@ const ClientPortal = () => {
                         </button>
                     ))}
                 </div>
-            </nav>
+            </nav>}
 
             <main className="portal-main">
-                {activeTab === 'dashboard' && <Dashboard slug={slug} isTelecom={isTelecom} onGoto={setTab} />}
+                {activeTab === 'dashboard' && <Dashboard key={isDemo ? 'demo' : slug} slug={slug}
+                    isTelecom={isTelecom} onGoto={isDemo ? undefined : setTab}
+                    demoData={isDemo ? DEMO_OVERVIEW : undefined} />}
                 {activeTab === 'subscribers' && <SubscriberTable slug={slug} />}
                 {activeTab === 'customers' && <CustomerTable slug={slug} />}
                 {activeTab === 'plans' && <PlanCatalog slug={slug} />}

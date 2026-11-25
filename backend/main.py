@@ -17,7 +17,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
@@ -207,10 +207,21 @@ if (portal_ui / "index.html").is_file():
     app.mount("/assets", StaticFiles(directory=portal_ui / "assets"), name="portal_assets")
 
     @app.get("/portal/{slug}", include_in_schema=False)
-    @app.get("/c/{slug}", include_in_schema=False)
     @app.get("/admin", include_in_schema=False)
     async def portal_index():
         return FileResponse(portal_ui / "index.html", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/c/{slug}", include_in_schema=False)
+    async def customer_index(request: Request):
+        host = request.url.netloc
+        return FileResponse(portal_ui / "index.html", headers={
+            "Cache-Control": "no-cache",
+            "Permissions-Policy": "geolocation=(), microphone=(self), camera=()",
+            "Content-Security-Policy": (
+                f"default-src 'self'; connect-src 'self' wss://{host} ws://{host}; "
+                "media-src 'self' blob:"
+            ),
+        })
 
 
 if __name__ == "__main__":

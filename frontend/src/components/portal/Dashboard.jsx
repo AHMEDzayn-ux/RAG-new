@@ -10,7 +10,7 @@ const Kpi = ({ icon, label, value, sub }) => (
     </div>
 );
 
-const Dashboard = ({ slug, isTelecom, onGoto }) => {
+const Dashboard = ({ slug, isTelecom, onGoto, demoData }) => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [seeding, setSeeding] = useState(false);
@@ -21,7 +21,7 @@ const Dashboard = ({ slug, isTelecom, onGoto }) => {
         catch (e) { console.error('overview failed', e); }
         finally { setLoading(false); }
     };
-    useEffect(() => { load(); }, [slug]);
+    useEffect(() => { if (!demoData) load(); }, [slug, demoData]);
 
     const seed = async () => {
         if (!window.confirm(
@@ -38,20 +38,24 @@ const Dashboard = ({ slug, isTelecom, onGoto }) => {
         } finally { setSeeding(false); }
     };
 
-    if (loading) return <Spinner text="Loading dashboard…" />;
-    const d = data || {};
+    if (loading && !demoData) return <Spinner text="Loading dashboard…" />;
+    const d = demoData || data || {};
     const empty = (d.subscribers_total || 0) === 0;
 
     return (
         <div>
             <div className="portal-section-head">
                 <h2>Dashboard</h2>
-                <span className="sub">Live customer-care operations</span>
+                <span className="sub">{demoData ? 'Sample customer-care operations' : 'Live customer-care operations'}</span>
                 <div className="portal-head-spacer" />
-                <button className="btn" onClick={load}><Icon name="refresh" size={14} /> Refresh</button>
-                <button className="btn btn-primary" onClick={seed} disabled={seeding}>
-                    <Icon name="sparkle" size={14} /> {seeding ? 'Seeding…' : (empty ? 'Load demo data' : 'Re-seed demo data')}
-                </button>
+                {!demoData && (
+                    <>
+                        <button className="btn" onClick={load}><Icon name="refresh" size={14} /> Refresh</button>
+                        <button className="btn btn-primary" onClick={seed} disabled={seeding}>
+                            <Icon name="sparkle" size={14} /> {seeding ? 'Seeding…' : (empty ? 'Load demo data' : 'Re-seed demo data')}
+                        </button>
+                    </>
+                )}
             </div>
 
             {empty && !isTelecom && (
