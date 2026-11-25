@@ -145,37 +145,67 @@ export const deleteClientAdmin = async (slug, userId) =>
   (await api.delete(`/api/clients/${slug}/admins/${userId}`)).data;
 
 // ---- Telecom portal (per-client enterprise console) -------------------------
-const portalBase = (slug) => `/api/portal/${slug}`;
-export const portalOverview = async (slug) =>
-  (await api.get(`${portalBase(slug)}/overview`)).data;
-export const portalSubscriptions = async (slug, params = {}) =>
-  (await api.get(`${portalBase(slug)}/subscriptions`, { params })).data;
-export const portalSubscription = async (slug, msisdn) =>
-  (await api.get(`${portalBase(slug)}/subscriptions/${msisdn}`)).data;
-export const updateSubscription = async (slug, msisdn, payload) =>
-  (await api.patch(`${portalBase(slug)}/subscriptions/${msisdn}`, payload)).data;
-export const activatePackage = async (slug, msisdn, payload) =>
-  (await api.post(`${portalBase(slug)}/subscriptions/${msisdn}/activate`, payload)).data;
-export const portalCustomers = async (slug, params = {}) =>
-  (await api.get(`${portalBase(slug)}/customers`, { params })).data;
-export const portalPlans = async (slug) =>
-  (await api.get(`${portalBase(slug)}/plans`)).data;
-export const portalCdrs = async (slug, params = {}) =>
-  (await api.get(`${portalBase(slug)}/cdrs`, { params })).data;
-export const portalTransactions = async (slug, params = {}) =>
-  (await api.get(`${portalBase(slug)}/transactions`, { params })).data;
-export const portalInvoices = async (slug, params = {}) =>
-  (await api.get(`${portalBase(slug)}/invoices`, { params })).data;
-export const portalActivations = async (slug, params = {}) =>
-  (await api.get(`${portalBase(slug)}/activations`, { params })).data;
-export const portalTickets = async (slug, params = {}) =>
-  (await api.get(`${portalBase(slug)}/tickets`, { params })).data;
-export const createTicket = async (slug, payload) =>
-  (await api.post(`${portalBase(slug)}/tickets`, payload)).data;
-export const updateTicket = async (slug, ticketId, payload) =>
-  (await api.patch(`${portalBase(slug)}/tickets/${ticketId}`, payload)).data;
-export const portalSeed = async (slug) =>
-  (await api.post(`${portalBase(slug)}/seed`)).data;
+export const DEMO_PORTAL = Symbol("Nexus demo portal");
+export const DEMO_EXPIRED_EVENT = "nexus:demo-expired";
+export const DEMO_LOGIN = Object.freeze({ email: "demo-admin@nexus.local", password: "NexusDemo123" });
+const DEMO_SESSION_KEY = "nexus_demo_session";
+const demoApi = axios.create({ baseURL: `${API_BASE_URL}/demo` });
+
+export const hasDemoSession = () => !!sessionStorage.getItem(DEMO_SESSION_KEY);
+export const clearDemoSession = () => sessionStorage.removeItem(DEMO_SESSION_KEY);
+export const openDemoSession = async (login) => {
+  const { data } = await demoApi.post("/session", login);
+  sessionStorage.setItem(DEMO_SESSION_KEY, data.token);
+};
+
+demoApi.interceptors.request.use((config) => {
+  const token = sessionStorage.getItem(DEMO_SESSION_KEY);
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+demoApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const token = sessionStorage.getItem(DEMO_SESSION_KEY);
+    if (error.response?.status === 401 && token &&
+        error.config?.headers?.Authorization === `Bearer ${token}`) {
+      clearDemoSession();
+      window.dispatchEvent(new Event(DEMO_EXPIRED_EVENT));
+    }
+    return Promise.reject(error);
+  },
+);
+
+const portalRequest = async (slug, path, options) => {
+  const demo = slug === DEMO_PORTAL;
+  const client = demo ? demoApi : api;
+  const tenant = demo ? "nexus" : slug;
+  return (await client.request({ url: `/api/portal/${tenant}${path}`, ...options })).data;
+};
+export const portalOverview = (slug) => portalRequest(slug, "/overview");
+export const portalSubscriptions = (slug, params = {}) =>
+  portalRequest(slug, "/subscriptions", { params });
+export const portalSubscription = (slug, msisdn) =>
+  portalRequest(slug, `/subscriptions/${msisdn}`);
+export const updateSubscription = (slug, msisdn, data) =>
+  portalRequest(slug, `/subscriptions/${msisdn}`, { method: "patch", data });
+export const activatePackage = (slug, msisdn, data) =>
+  portalRequest(slug, `/subscriptions/${msisdn}/activate`, { method: "post", data });
+export const portalCustomers = (slug, params = {}) =>
+  portalRequest(slug, "/customers", { params });
+export const portalPlans = (slug) => portalRequest(slug, "/plans");
+export const portalCdrs = (slug, params = {}) => portalRequest(slug, "/cdrs", { params });
+export const portalTransactions = (slug, params = {}) =>
+  portalRequest(slug, "/transactions", { params });
+export const portalInvoices = (slug, params = {}) => portalRequest(slug, "/invoices", { params });
+export const portalActivations = (slug, params = {}) =>
+  portalRequest(slug, "/activations", { params });
+export const portalTickets = (slug, params = {}) => portalRequest(slug, "/tickets", { params });
+export const createTicket = (slug, data) =>
+  portalRequest(slug, "/tickets", { method: "post", data });
+export const updateTicket = (slug, ticketId, data) =>
+  portalRequest(slug, `/tickets/${ticketId}`, { method: "patch", data });
+export const portalSeed = (slug) => portalRequest(slug, "/seed", { method: "post" });
 
 // ---- Health -----------------------------------------------------------------
 export const checkHealth = async () =>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     isAuthenticated, getToken, adminLogin, logout, getMe, publicGetConfig,
+    DEMO_LOGIN, DEMO_PORTAL, DEMO_EXPIRED_EVENT, hasDemoSession, clearDemoSession, openDemoSession,
 } from '../services/api';
 import Icon from '../components/Icon';
 import { Spinner } from '../components/portal/ui';
@@ -31,26 +32,7 @@ const BASIC_TABS = [
 ];
 
 // ---- login gate -------------------------------------------------------------
-const demoDate = new Date().toISOString();
-const DEMO_OVERVIEW = {
-    subscribers_total: 64,
-    subscribers_active: 60,
-    customers_total: 50,
-    tickets_open: 33,
-    activations_today: 3,
-    revenue_today: 2730,
-    revenue_month: 18450,
-    recent_activations: [
-        { id: 1, reference: 'DEMO-A101', msisdn: 'Demo line 01', package_name: 'Weekly Data', channel: 'web', price: 490, activated_at: demoDate },
-        { id: 2, reference: 'DEMO-A102', msisdn: 'Demo line 02', package_name: 'Monthly Combo', channel: 'voice', price: 1290, activated_at: demoDate },
-    ],
-    recent_tickets: [
-        { id: 1, ticket_number: 'DEMO-T101', subject: 'Help with prepaid recharge', priority: 'medium', status: 'open', channel: 'web', created_at: demoDate },
-        { id: 2, ticket_number: 'DEMO-T102', subject: 'Check mobile data settings', priority: 'low', status: 'resolved', channel: 'voice', created_at: demoDate },
-    ],
-};
-
-const PortalLogin = ({ slug, brand, onLogin, onDemo }) => {
+const PortalLogin = ({ slug, brand, onLogin, onDemo, notice }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -61,13 +43,23 @@ const PortalLogin = ({ slug, brand, onLogin, onDemo }) => {
         setError('');
         setLoading(true);
         try {
-            await adminLogin(email, password);
-            await onLogin();
+            if (onDemo && email.trim().toLowerCase() === DEMO_LOGIN.email) {
+                await onDemo({ email, password });
+            } else {
+                await adminLogin(email, password);
+                await onLogin();
+            }
         } catch (err) {
             setError(err?.response?.data?.detail || 'Login failed');
         } finally {
             setLoading(false);
         }
+    };
+
+    const fillDemoLogin = () => {
+        setEmail(DEMO_LOGIN.email);
+        setPassword(DEMO_LOGIN.password);
+        setError('');
     };
 
     return (
@@ -76,10 +68,10 @@ const PortalLogin = ({ slug, brand, onLogin, onDemo }) => {
                 <span className="portal-logo"><Icon name="lock" size={22} /></span>
                 <h1>{brand || slug} — Admin</h1>
                 <p>Staff sign-in for the {brand || slug} customer-care console.</p>
-                {error && <div className="portal-login-error">{error}</div>}
-                <input type="email" placeholder="Work email" value={email}
+                {(error || notice) && <div className="portal-login-error">{error || notice}</div>}
+                <input type="email" autoComplete="username" placeholder="Work email" value={email}
                     onChange={(e) => setEmail(e.target.value)} autoFocus />
-                <input type="password" placeholder="Password" value={password}
+                <input type="password" autoComplete="current-password" placeholder="Password" value={password}
                     onChange={(e) => setPassword(e.target.value)} />
                 <button type="submit" disabled={loading || !email || !password}>
                     {loading ? 'Signing in…' : 'Sign in'}
@@ -88,7 +80,7 @@ const PortalLogin = ({ slug, brand, onLogin, onDemo }) => {
                     <button
                         type="button"
                         className="portal-login-demo"
-                        onClick={onDemo}
+                        onClick={fillDemoLogin}
                         disabled={loading}
                     >
                         Demo Login
@@ -112,8 +104,10 @@ const ClientPortal = () => {
     const [me, setMe] = useState(null);
     const [config, setConfig] = useState(null);
     const [tab, setTab] = useState('dashboard');
+    const [notice, setNotice] = useState('');
 
     const checkAuth = useCallback(async () => {
+        if (slug === 'nexus' && hasDemoSession()) { setStatus('demo'); return; }
         if (!isAuthenticated() || !getToken()) { setStatus('login'); return; }
         try {
             const who = await getMe();
@@ -133,27 +127,43 @@ const ClientPortal = () => {
         checkAuth();
     }, [slug, checkAuth]);
 
-    const isDemo = status === 'demo';
+    useEffect(() => {
+        const onDemoExpired = () => {
+            setNotice('Your demo session ended. Click Demo Login to start again.');
+            setTab('dashboard');
+            setStatus((previous) => previous === 'demo' ? 'login' : previous);
+        };
+        window.addEventListener(DEMO_EXPIRED_EVENT, onDemoExpired);
+        return () => window.removeEventListener(DEMO_EXPIRED_EVENT, onDemoExpired);
+    }, []);
+
+    const isDemo = status === 'demo' && slug === 'nexus';
     const signOut = () => {
-        if (!isDemo) logout();
+        if (isDemo) clearDemoSession();
+        else logout();
         setMe(null);
+        setNotice('');
         setTab('dashboard');
         setStatus('login');
     };
-    const openDemo = () => {
+    const openDemo = async (login) => {
+        setNotice('');
+        await openDemoSession(login);
         setTab('dashboard');
         setStatus('demo');
+        window.scrollTo(0, 0);
     };
 
     const brand = isDemo ? 'Nexus Telecom' : (config?.name || slug);
-    const isTelecom = (config?.domain || '') === 'telecom';
-    const tabs = isDemo ? [] : (isTelecom ? TELECOM_TABS : BASIC_TABS);
+    const isTelecom = isDemo || config?.domain === 'telecom';
+    const tabs = isTelecom ? TELECOM_TABS : BASIC_TABS;
+    const portalScope = isDemo ? DEMO_PORTAL : slug;
 
-    if (status === 'loading') {
+    if (status === 'loading' || (status === 'demo' && !isDemo)) {
         return <div className="portal"><Spinner text="Loading portal…" /></div>;
     }
     if (status === 'login') {
-        return <PortalLogin slug={slug} brand={config?.name} onLogin={checkAuth}
+        return <PortalLogin slug={slug} brand={config?.name} onLogin={checkAuth} notice={notice}
             onDemo={slug === 'nexus' ? openDemo : undefined} />;
     }
     if (status === 'denied') {
@@ -178,8 +188,8 @@ const ClientPortal = () => {
                     <div className="portal-brand">
                         <span className="portal-logo"><Icon name="phone-call" size={20} /></span>
                         <div>
-                            <h1>{brand} <span style={{ fontWeight: 500, color: 'var(--text-faint)' }}>· Admin</span></h1>
-                            <p>{isDemo ? 'Read-only demo with sample data' : 'Customer-care operations console'}</p>
+                            <h1>{brand} <span style={{ fontWeight: 500, color: 'var(--text-faint)' }}>· {isDemo ? 'Demo' : 'Admin'}</span></h1>
+                            <p>{isDemo ? 'Interactive demo with sample data' : 'Customer-care operations console'}</p>
                         </div>
                     </div>
                     <div className="portal-top-spacer" />
@@ -198,7 +208,7 @@ const ClientPortal = () => {
                 </div>
             </div>
 
-            {!isDemo && <nav className="portal-tabs">
+            <nav className="portal-tabs">
                 <div className="portal-tabs-inner">
                     {tabs.map((t) => (
                         <button key={t.key}
@@ -208,19 +218,18 @@ const ClientPortal = () => {
                         </button>
                     ))}
                 </div>
-            </nav>}
+            </nav>
 
-            <main className="portal-main">
-                {activeTab === 'dashboard' && <Dashboard key={isDemo ? 'demo' : slug} slug={slug}
-                    isTelecom={isTelecom} onGoto={isDemo ? undefined : setTab}
-                    demoData={isDemo ? DEMO_OVERVIEW : undefined} />}
-                {activeTab === 'subscribers' && <SubscriberTable slug={slug} />}
-                {activeTab === 'customers' && <CustomerTable slug={slug} />}
-                {activeTab === 'plans' && <PlanCatalog slug={slug} />}
-                {activeTab === 'tickets' && <TicketBoard slug={slug} />}
-                {activeTab === 'activations' && <ActivationsTable slug={slug} />}
-                {activeTab === 'calls' && <CallHistory slug={slug} />}
-                {activeTab === 'billing' && <BillingHistory slug={slug} />}
+            <main className="portal-main" key={isDemo ? 'demo' : slug}>
+                {activeTab === 'dashboard' && <Dashboard slug={portalScope}
+                    isTelecom={isTelecom} onGoto={setTab} isDemo={isDemo} />}
+                {activeTab === 'subscribers' && <SubscriberTable slug={portalScope} />}
+                {activeTab === 'customers' && <CustomerTable slug={portalScope} />}
+                {activeTab === 'plans' && <PlanCatalog slug={portalScope} />}
+                {activeTab === 'tickets' && <TicketBoard slug={portalScope} />}
+                {activeTab === 'activations' && <ActivationsTable slug={portalScope} />}
+                {activeTab === 'calls' && <CallHistory slug={portalScope} />}
+                {activeTab === 'billing' && <BillingHistory slug={portalScope} />}
             </main>
         </div>
     );

@@ -10,7 +10,7 @@ const Kpi = ({ icon, label, value, sub }) => (
     </div>
 );
 
-const Dashboard = ({ slug, isTelecom, onGoto, demoData }) => {
+const Dashboard = ({ slug, isTelecom, onGoto, isDemo = false }) => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [seeding, setSeeding] = useState(false);
@@ -21,41 +21,40 @@ const Dashboard = ({ slug, isTelecom, onGoto, demoData }) => {
         catch (e) { console.error('overview failed', e); }
         finally { setLoading(false); }
     };
-    useEffect(() => { if (!demoData) load(); }, [slug, demoData]);
+    useEffect(() => { load(); }, [slug]);
 
     const seed = async () => {
-        if (!window.confirm(
-            'Load the enterprise telecom demo dataset?\n\nThis creates ~50 customers with subscriptions, '
-            + 'call records, a charging ledger, activations and tickets, and sets this client to the telecom domain. '
-            + 'It replaces any existing telecom data for this client.')) return;
+        const confirmText = isDemo
+            ? 'Seed a fresh sample dataset? This replaces edits made in this demo session.'
+            : 'Load the enterprise telecom demo dataset?\n\nThis creates ~50 customers with subscriptions, '
+                + 'call records, a charging ledger, activations and tickets, and sets this client to the telecom domain. '
+                + 'It replaces any existing telecom data for this client.';
+        if (!window.confirm(confirmText)) return;
         setSeeding(true);
         try {
             const res = await portalSeed(slug);
             alert(`${res.message}\n${res.detail || ''}`);
-            window.location.reload(); // pick up domain=telecom + new data
+            if (isDemo) await load();
+            else window.location.reload(); // pick up domain=telecom + new data
         } catch (e) {
             alert('Seed failed: ' + (e?.response?.data?.detail || e.message));
         } finally { setSeeding(false); }
     };
 
-    if (loading && !demoData) return <Spinner text="Loading dashboard…" />;
-    const d = demoData || data || {};
+    if (loading) return <Spinner text="Loading dashboard…" />;
+    const d = data || {};
     const empty = (d.subscribers_total || 0) === 0;
 
     return (
         <div>
             <div className="portal-section-head">
                 <h2>Dashboard</h2>
-                <span className="sub">{demoData ? 'Sample customer-care operations' : 'Live customer-care operations'}</span>
+                <span className="sub">{isDemo ? 'Sample customer-care operations' : 'Live customer-care operations'}</span>
                 <div className="portal-head-spacer" />
-                {!demoData && (
-                    <>
-                        <button className="btn" onClick={load}><Icon name="refresh" size={14} /> Refresh</button>
-                        <button className="btn btn-primary" onClick={seed} disabled={seeding}>
-                            <Icon name="sparkle" size={14} /> {seeding ? 'Seeding…' : (empty ? 'Load demo data' : 'Re-seed demo data')}
-                        </button>
-                    </>
-                )}
+                <button className="btn" onClick={load}><Icon name="refresh" size={14} /> Refresh</button>
+                <button className="btn btn-primary" onClick={seed} disabled={seeding || loading}>
+                    <Icon name="sparkle" size={14} /> {seeding ? 'Seeding…' : isDemo ? 'Seed demo data' : empty ? 'Load demo data' : 'Re-seed demo data'}
+                </button>
             </div>
 
             {empty && !isTelecom && (

@@ -31,6 +31,7 @@ from api.public import router as public_router
 from api.meta import router as meta_router
 from api.auth_routes import router as auth_router
 from api.portal import router as portal_router
+from api.demo_portal import demo_app
 from integrations.whatsapp_bot import router as whatsapp_router
 from config import settings
 from security import SecurityMiddleware
@@ -171,6 +172,7 @@ app.include_router(query_router)
 app.include_router(voice_router)
 app.include_router(whatsapp_router)
 app.include_router(portal_router)
+app.mount("/demo", demo_app)
 
 
 @app.get("/widget.js")
