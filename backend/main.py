@@ -15,10 +15,13 @@ import sentence_transformers  # noqa: F401  (side-effect: init torch/OpenMP firs
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from logger import get_logger, setup_logging
 from api.clients import router as clients_router
 from api.documents import router as documents_router
@@ -120,7 +123,7 @@ if settings.environment == "production":
         TrustedHostMiddleware,
         allowed_hosts=[
             "api.yourdomain.com", "*.onrender.com", "*.hf.space", "*.ondigitalocean.app",
-            "*.run.app", "localhost", "127.0.0.1",
+            "*.run.app", "*.azurecontainerapps.io", "localhost", "127.0.0.1",
         ]
     )
 
@@ -152,7 +155,7 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
     expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
     max_age=3600,
@@ -173,10 +176,8 @@ app.include_router(portal_router)
 @app.get("/widget.js")
 async def widget_js():
     """Serve the embeddable chat widget script."""
-    from pathlib import Path as _Path
-    from fastapi.responses import FileResponse
     return FileResponse(
-        _Path(__file__).parent / "static" / "widget.js",
+        Path(__file__).parent / "static" / "widget.js",
         media_type="application/javascript",
     )
 
@@ -199,6 +200,17 @@ async def health_check():
         "status": "healthy",
         "message": "RAG Chatbot API is running"
     }
+
+
+portal_ui = Path(__file__).with_name("portal_ui")
+if (portal_ui / "index.html").is_file():
+    app.mount("/assets", StaticFiles(directory=portal_ui / "assets"), name="portal_assets")
+
+    @app.get("/portal/{slug}", include_in_schema=False)
+    @app.get("/c/{slug}", include_in_schema=False)
+    @app.get("/admin", include_in_schema=False)
+    async def portal_index():
+        return FileResponse(portal_ui / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 if __name__ == "__main__":

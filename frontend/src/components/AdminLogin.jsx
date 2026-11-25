@@ -68,7 +68,7 @@ const AdminLogin = ({ onLogin }) => {
                 >
                     {isRegister ? 'Have an account? Sign in' : 'New here? Create an account'}
                 </button>
-                {!isRegister && (
+                {!isRegister && import.meta.env.VITE_SHOW_DEMO_LOGINS !== 'false' && (
                     <button
                         type="button"
                         className="login-switch"

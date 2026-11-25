@@ -1,7 +1,10 @@
 import axios from "axios";
 
 // Base URL — env-driven so it works in production (no hardcoded localhost).
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+const API_BASE_URL = configuredApiUrl === "/"
+  ? window.location.origin
+  : configuredApiUrl || "http://localhost:8000";
 export const API_BASE = API_BASE_URL;
 
 // WebSocket base (voice call). Derives ws:// or wss:// from the HTTP base.

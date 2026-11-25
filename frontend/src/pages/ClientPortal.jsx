@@ -40,7 +40,7 @@ const PortalLogin = ({ slug, brand, onLogin }) => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const demoCreds = DEMO_PORTAL_LOGINS[slug];
+    const demoCreds = import.meta.env.VITE_SHOW_DEMO_LOGINS !== 'false' && DEMO_PORTAL_LOGINS[slug];
 
     const submit = async (e) => {
         e.preventDefault();

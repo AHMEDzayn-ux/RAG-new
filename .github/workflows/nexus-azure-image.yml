@@ -1,0 +1,60 @@
+name: Build Nexus Azure image
+
+on:
+  push:
+    branches: [deploy/nexus-azure]
+    paths:
+      - backend/**
+      - frontend/src/**
+      - frontend/package*.json
+      - frontend/index.html
+      - frontend/vite.config.js
+      - .github/workflows/nexus-azure-image.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /backend/
+            /frontend/src/
+            /frontend/public/
+            /frontend/package.json
+            /frontend/package-lock.json
+            /frontend/index.html
+            /frontend/vite.config.js
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the portal for same-origin hosting
+        env:
+          VITE_API_URL: /
+          VITE_SHOW_DEMO_LOGINS: 'false'
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run build
+          mv frontend/dist backend/portal_ui
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.NEXUS_AZURE_BUILD_CLIENT_ID }}
+          tenant-id: ${{ vars.NEXUS_AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.NEXUS_AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push image to Azure Container Registry
+        env:
+          REGISTRY_NAME: ${{ vars.NEXUS_AZURE_REGISTRY_NAME }}
+          REGISTRY_HOST: ${{ vars.NEXUS_AZURE_REGISTRY_HOST }}
+        run: |
+          set -euo pipefail
+          image="$REGISTRY_HOST/nexus-backend:$GITHUB_SHA"
+          az acr login --name "$REGISTRY_NAME"
+          docker build --platform linux/amd64 --tag "$image" backend
+          docker push "$image"
